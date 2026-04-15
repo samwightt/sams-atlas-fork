@@ -111,6 +111,117 @@ func TestExcludeRealm(t *testing.T) {
 	})
 }
 
+func TestIncludeRealm(t *testing.T) {
+	t.Run("NoPatterns", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public"), schema.New("internal"))
+		got, err := schema.IncludeRealm(r, nil)
+		require.NoError(t, err)
+		require.Len(t, got.Schemas, 2)
+	})
+
+	t.Run("IncludeSchemaByName", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public"), schema.New("internal"))
+		got, err := schema.IncludeRealm(r, []string{"public"})
+		require.NoError(t, err)
+		require.Len(t, got.Schemas, 1)
+		require.Equal(t, "public", got.Schemas[0].Name)
+	})
+
+	t.Run("IncludeSchemaGlob", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public"), schema.New("internal"), schema.New("other"))
+		got, err := schema.IncludeRealm(r, []string{"*"})
+		require.NoError(t, err)
+		require.Len(t, got.Schemas, 3)
+	})
+
+	t.Run("IncludeTableInSchema", func(t *testing.T) {
+		r := schema.NewRealm(
+			schema.New("public").AddTables(
+				schema.NewTable("users"),
+				schema.NewTable("pets"),
+			),
+		)
+		got, err := schema.IncludeRealm(r, []string{"public.users"})
+		require.NoError(t, err)
+		require.Len(t, got.Schemas, 1)
+		require.Len(t, got.Schemas[0].Tables, 1)
+		require.Equal(t, "users", got.Schemas[0].Tables[0].Name)
+	})
+
+	t.Run("IncludeTableGlob", func(t *testing.T) {
+		r := schema.NewRealm(
+			schema.New("public").AddTables(
+				schema.NewTable("users"),
+				schema.NewTable("user_roles"),
+				schema.NewTable("pets"),
+			),
+		)
+		got, err := schema.IncludeRealm(r, []string{"public.user*"})
+		require.NoError(t, err)
+		require.Len(t, got.Schemas[0].Tables, 2)
+	})
+
+	t.Run("IncludeColumnInTable", func(t *testing.T) {
+		r := schema.NewRealm(
+			schema.New("public").AddTables(
+				schema.NewTable("users").AddColumns(
+					schema.NewStringColumn("name", "text"),
+					schema.NewStringColumn("password", "text"),
+				),
+			),
+		)
+		got, err := schema.IncludeRealm(r, []string{"public.users.name"})
+		require.NoError(t, err)
+		require.Len(t, got.Schemas[0].Tables[0].Columns, 1)
+		require.Equal(t, "name", got.Schemas[0].Tables[0].Columns[0].Name)
+	})
+
+	t.Run("IncludeObjectByName", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public")).AddObjects(
+			&testObject{typ: "extension", name: "pgcrypto"},
+			&testObject{typ: "extension", name: "fuzzystrmatch"},
+		)
+		got, err := schema.IncludeRealm(r, []string{"pgcrypto"})
+		require.NoError(t, err)
+		require.Len(t, got.Objects, 1)
+		require.Equal(t, "pgcrypto", got.Objects[0].(schema.SpecTypeNamer).SpecName())
+	})
+
+	t.Run("IncludeObjectByTypeSelector", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public")).AddObjects(
+			&testObject{typ: "extension", name: "pgcrypto"},
+			&testObject{typ: "other", name: "something"},
+		)
+		got, err := schema.IncludeRealm(r, []string{"*[type=extension]"})
+		require.NoError(t, err)
+		require.Len(t, got.Objects, 1)
+		require.Equal(t, "pgcrypto", got.Objects[0].(schema.SpecTypeNamer).SpecName())
+	})
+}
+
+func TestIncludeSchema(t *testing.T) {
+	t.Run("NoPatterns", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public").AddTables(schema.NewTable("users"), schema.NewTable("pets")))
+		got, err := schema.IncludeSchema(r.Schemas[0], nil)
+		require.NoError(t, err)
+		require.Len(t, got.Tables, 2)
+	})
+
+	t.Run("IncludeTable", func(t *testing.T) {
+		r := schema.NewRealm(schema.New("public").AddTables(schema.NewTable("users"), schema.NewTable("pets")))
+		got, err := schema.IncludeSchema(r.Schemas[0], []string{"users"})
+		require.NoError(t, err)
+		require.Len(t, got.Tables, 1)
+		require.Equal(t, "users", got.Tables[0].Name)
+	})
+
+	t.Run("MissingRealm", func(t *testing.T) {
+		s := schema.New("public")
+		_, err := schema.IncludeSchema(s, []string{"users"})
+		require.ErrorContains(t, err, "missing realm")
+	})
+}
+
 func TestExcludeSchema(t *testing.T) {
 	t.Run("NoPatterns", func(t *testing.T) {
 		r := schema.NewRealm(schema.New("public").AddTables(schema.NewTable("users"), schema.NewTable("pets")))
