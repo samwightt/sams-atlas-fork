@@ -59,7 +59,10 @@ func (i *inspect) InspectRealm(ctx context.Context, opts *schema.InspectRealmOpt
 			sqlx.LinkSchemaTables(schemas)
 		}
 	}
-	return schema.ExcludeRealm(r, opts.Exclude)
+	if r, err = schema.ExcludeRealm(r, opts.Exclude); err != nil {
+		return nil, err
+	}
+	return schema.IncludeRealm(r, opts.Include)
 }
 
 // noSearchPath ensures the session search_path is clean when inspecting realms to ensures all
@@ -128,7 +131,10 @@ func (i *inspect) InspectSchema(ctx context.Context, name string, opts *schema.I
 		}
 		sqlx.LinkSchemaTables(schemas)
 	}
-	return schema.ExcludeSchema(r.Schemas[0], opts.Exclude)
+	if s, err = schema.ExcludeSchema(r.Schemas[0], opts.Exclude); err != nil {
+		return nil, err
+	}
+	return schema.IncludeSchema(s, opts.Include)
 }
 
 func (i *inspect) inspectTables(ctx context.Context, r *schema.Realm, opts *schema.InspectOptions) error {

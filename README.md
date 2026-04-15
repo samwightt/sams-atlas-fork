@@ -14,7 +14,7 @@ Thanks goes to the original Atlas authors. Just like the original repo, this is 
 
 ## Currently implemnted features
 
-None so far, but more to be added here.
+- [`--include` flag on `inspect`](https://atlasgo.io/faq/inspect-include-flag)
 
 ## Rest of the readme
 

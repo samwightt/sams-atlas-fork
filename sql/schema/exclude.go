@@ -270,12 +270,182 @@ func detachObject(o Object, refs []Object) {
 	}
 }
 
-// IncludeRealm is a no-op for the community version.
-func IncludeRealm(r *Realm, _ []string) (*Realm, error) {
-	return r, nil // Unimplemented.
+// IncludeRealm filters resources in the realm to only those matching the given patterns.
+func IncludeRealm(r *Realm, patterns []string) (*Realm, error) {
+	if len(patterns) == 0 {
+		return r, nil
+	}
+	globs, err := split(patterns)
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range globs {
+		// Realm objects are top-level resources, just like schemas.
+		if len(g) == 1 {
+			if r.Objects, err = includeObjects(r.Objects, g); err != nil {
+				return nil, err
+			}
+		}
+	}
+	var schemas []*Schema
+	for _, s := range r.Schemas {
+		for i, g := range globs {
+			if len(g) > 3 {
+				return nil, fmt.Errorf("too many parts in pattern: %q", patterns[i])
+			}
+			if globS, include := excludeType(typeS, g[0]); include {
+				match, err := filepath.Match(globS, s.Name)
+				if err != nil {
+					return nil, err
+				}
+				if match {
+					if len(g) == 1 {
+						// Full schema match — include it as-is.
+						schemas = append(schemas, s)
+					} else {
+						// Partial match — include only matching sub-resources.
+						if err := includeS(s, g[1:]); err != nil {
+							return nil, err
+						}
+						schemas = append(schemas, s)
+					}
+					break
+				}
+			}
+		}
+	}
+	r.Schemas = schemas
+	return r, nil
 }
 
-// IncludeSchema is a no-op for the community version.
-func IncludeSchema(s *Schema, _ []string) (*Schema, error) {
-	return s, nil // Unimplemented.
+// IncludeSchema filters resources in the schema to only those matching the given patterns.
+func IncludeSchema(s *Schema, patterns []string) (*Schema, error) {
+	if len(patterns) == 0 {
+		return s, nil
+	}
+	if s.Realm == nil {
+		return nil, fmt.Errorf("missing realm for schema %q", s.Name)
+	}
+	qualified := make([]string, len(patterns))
+	for i, p := range patterns {
+		qualified[i] = fmt.Sprintf("%s.%s", s.Name, p)
+	}
+	if _, err := IncludeRealm(s.Realm, qualified); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func includeS(s *Schema, glob []string) (err error) {
+	if s.Objects, err = includeObjects(s.Objects, glob); err != nil {
+		return err
+	}
+	if globT, include := excludeType(typeT, glob[0]); include {
+		var tables []*Table
+		for _, t := range s.Tables {
+			match, err := filepath.Match(globT, t.Name)
+			if err != nil {
+				return err
+			}
+			if !match {
+				continue
+			}
+			if len(glob) > 1 {
+				if err := includeT(t, glob[1]); err != nil {
+					return err
+				}
+			}
+			tables = append(tables, t)
+		}
+		s.Tables = tables
+	} else {
+		s.Tables = nil
+	}
+	return nil
+}
+
+func includeT(t *Table, pattern string) (err error) {
+	if p, include := excludeType(typeC, pattern); include {
+		t.Columns, err = filterInclude(t.Columns, func(c *Column) (bool, error) {
+			return filepath.Match(p, c.Name)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if p, include := excludeType(typeI, pattern); include {
+		t.Indexes, err = filterInclude(t.Indexes, func(idx *Index) (bool, error) {
+			return filepath.Match(p, idx.Name)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if p, include := excludeType(typeF, pattern); include {
+		t.ForeignKeys, err = filterInclude(t.ForeignKeys, func(fk *ForeignKey) (bool, error) {
+			return filepath.Match(p, fk.Symbol)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if p, include := excludeType(typeK, pattern); include {
+		t.Attrs, err = filterInclude(t.Attrs, func(a Attr) (bool, error) {
+			c, ok := a.(*Check)
+			if !ok {
+				return false, nil
+			}
+			return filepath.Match(p, c.Name)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return
+}
+
+func includeObjects(all []Object, glob []string) ([]Object, error) {
+	var (
+		objects = make([]Object, 0, len(all))
+		t2glob  = make(map[string]struct {
+			glob    string
+			include bool
+		})
+	)
+	for _, o := range all {
+		nt, ok := o.(SpecTypeNamer)
+		if !ok {
+			objects = append(objects, o)
+			continue
+		}
+		cache, ok := t2glob[nt.SpecType()]
+		if !ok {
+			cache.glob, cache.include = excludeType(nt.SpecType(), glob[0])
+			t2glob[nt.SpecType()] = cache
+		}
+		if cache.include {
+			match, err := filepath.Match(cache.glob, nt.SpecName())
+			if err != nil {
+				return nil, err
+			}
+			if match {
+				objects = append(objects, o)
+			}
+		}
+	}
+	return objects, nil
+}
+
+func filterInclude[T any](s []T, f func(T) (bool, error)) ([]T, error) {
+	r := make([]T, 0, len(s))
+	for i := range s {
+		match, err := f(s[i])
+		if err != nil {
+			return nil, err
+		}
+		if match {
+			r = append(r, s[i])
+		}
+	}
+	return r, nil
 }

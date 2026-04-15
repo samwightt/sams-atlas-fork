@@ -20,8 +20,8 @@ import (
 
 	"ariga.io/atlas/cmd/atlas/internal/cmdext"
 	"ariga.io/atlas/cmd/atlas/internal/cmdlog"
-	cmdmigrate "ariga.io/atlas/cmd/atlas/internal/migrate"
 	"ariga.io/atlas/cmd/atlas/internal/cmdstate"
+	cmdmigrate "ariga.io/atlas/cmd/atlas/internal/migrate"
 	"ariga.io/atlas/cmd/atlas/internal/migratelint"
 	"ariga.io/atlas/schemahcl"
 	"ariga.io/atlas/sql/migrate"
@@ -1152,6 +1152,7 @@ type schemaInspectFlags struct {
 	logFormat string   // Format of the log output.
 	schemas   []string // Schemas to take into account when diffing.
 	exclude   []string // List of glob patterns used to filter resources from applying (see schema.InspectOptions).
+	include   []string // List of glob patterns used to filter resources to include (see schema.InspectOptions).
 }
 
 // schemaInspectCmd represents the 'atlas schema inspect' subcommand.
@@ -1200,6 +1201,7 @@ flag.
 	addFlagDevURL(cmd.Flags(), &flags.devURL)
 	addFlagSchemas(cmd.Flags(), &flags.schemas)
 	addFlagExclude(cmd.Flags(), &flags.exclude)
+	addFlagInclude(cmd.Flags(), &flags.include)
 	addFlagLog(cmd.Flags(), &flags.logFormat)
 	addFlagFormat(cmd.Flags(), &flags.logFormat)
 	cobra.CheckErr(cmd.MarkFlagRequired(flagURL))
@@ -1228,6 +1230,7 @@ func schemaInspectRun(cmd *cobra.Command, _ []string, flags schemaInspectFlags, 
 		vars:    env.Vars(),
 		schemas: flags.schemas,
 		exclude: flags.exclude,
+		include: flags.include,
 	})
 	if err != nil {
 		return err
