@@ -420,7 +420,10 @@ func (i *inspect) InspectRealm(ctx context.Context, opts *schema.InspectRealmOpt
 		}
 		sqlx.LinkSchemaTables(r.Schemas)
 	}
-	return schema.ExcludeRealm(r, opts.Exclude)
+	if r, err = schema.ExcludeRealm(r, opts.Exclude); err != nil {
+		return nil, err
+	}
+	return schema.IncludeRealm(r, opts.Include)
 }
 
 // InspectSchema returns schema descriptions of the tables in the given schema.
@@ -460,7 +463,11 @@ func (i *inspect) InspectSchema(ctx context.Context, name string, opts *schema.I
 		}
 		sqlx.LinkSchemaTables(schemas)
 	}
-	return schema.ExcludeSchema(r.Schemas[0], opts.Exclude)
+	s, err := schema.ExcludeSchema(r.Schemas[0], opts.Exclude)
+	if err != nil {
+		return nil, err
+	}
+	return schema.IncludeSchema(s, opts.Include)
 }
 
 var (

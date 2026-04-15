@@ -972,6 +972,38 @@ func TestSchema_InspectLog(t *testing.T) {
 	require.Equal(t, `{"schemas":[{"name":"main","tables":[{"name":"t1","columns":[{"name":"id","type":"INTEGER","null":true}],"primary_key":{"parts":[{"column":"id"}]}},{"name":"t2","columns":[{"name":"name","type":"TEXT","null":true}]}]}]}`, s)
 }
 
+func TestSchema_InspectInclude(t *testing.T) {
+	db := openSQLite(t, "create table users (id integer primary key); create table pets (id integer primary key);")
+
+	t.Run("IncludeTable", func(t *testing.T) {
+		cmd := schemaCmd()
+		cmd.AddCommand(schemaInspectCmd())
+		s, err := runCmd(
+			cmd, "inspect",
+			"-u", db,
+			"--include", "users",
+			"--format", "{{ json . }}",
+		)
+		require.NoError(t, err)
+		require.Contains(t, s, `"name":"users"`)
+		require.NotContains(t, s, `"name":"pets"`)
+	})
+
+	t.Run("IncludeGlob", func(t *testing.T) {
+		cmd := schemaCmd()
+		cmd.AddCommand(schemaInspectCmd())
+		s, err := runCmd(
+			cmd, "inspect",
+			"-u", db,
+			"--include", "*",
+			"--format", "{{ json . }}",
+		)
+		require.NoError(t, err)
+		require.Contains(t, s, `"name":"users"`)
+		require.Contains(t, s, `"name":"pets"`)
+	})
+}
+
 func TestSchema_InspectFile(t *testing.T) {
 	var (
 		p   = t.TempDir()
