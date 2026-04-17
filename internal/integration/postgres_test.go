@@ -317,6 +317,82 @@ func TestPostgres_Enums(t *testing.T) {
 	})
 }
 
+func TestPostgres_Extensions(t *testing.T) {
+	pgRun(t, func(t *pgTest) {
+		// hstore ships with every Postgres contrib build but isn't
+		// auto-installed, so the test can install/drop it cleanly.
+		ctx := context.Background()
+		t.Cleanup(func() {
+			_, err := t.drv.ExecContext(ctx, `DROP EXTENSION IF EXISTS hstore CASCADE`)
+			require.NoError(t, err)
+		})
+		// Start clean.
+		_, err := t.drv.ExecContext(ctx, `DROP EXTENSION IF EXISTS hstore CASCADE`)
+		require.NoError(t, err)
+
+		hasExt := func(r *schema.Realm, name string) *postgres.Extension {
+			for _, o := range r.Objects {
+				if e, ok := o.(*postgres.Extension); ok && e.Name == name {
+					return e
+				}
+			}
+			return nil
+		}
+
+		// Sanity check the preconditions: plpgsql is filtered out, hstore isn't installed.
+		r, err := t.drv.InspectRealm(ctx, &schema.InspectRealmOption{Mode: schema.InspectObjects})
+		require.NoError(t, err)
+		require.Nil(t, hasExt(r, "plpgsql"), "plpgsql should be filtered from inspect")
+		require.Nil(t, hasExt(r, "hstore"), "hstore must not be installed at test start")
+
+		// Install hstore.
+		require.NoError(t, t.drv.ApplyChanges(ctx, []schema.Change{
+			&schema.AddObject{O: &postgres.Extension{Name: "hstore"}},
+		}))
+
+		r, err = t.drv.InspectRealm(ctx, &schema.InspectRealmOption{Mode: schema.InspectSchemas | schema.InspectObjects})
+		require.NoError(t, err)
+		ext := hasExt(r, "hstore")
+		require.NotNil(t, ext, "hstore should appear in inspect after create")
+		require.NotEmpty(t, ext.Version, "inspect should populate the installed version")
+		require.NotEmpty(t, ext.Comment, "inspect should populate the control-file comment")
+		require.NotNil(t, ext.Schema, "hstore installed into public should resolve to the managed schema")
+		require.Equal(t, "public", ext.Schema.Name)
+
+		// Relocate hstore into a fresh managed schema.
+		t.Cleanup(func() {
+			_, err := t.drv.ExecContext(ctx, `DROP SCHEMA IF EXISTS ext CASCADE`)
+			require.NoError(t, err)
+		})
+		_, err = t.drv.ExecContext(ctx, `DROP SCHEMA IF EXISTS ext CASCADE`)
+		require.NoError(t, err)
+		extNS := schema.New("ext")
+		require.NoError(t, t.drv.ApplyChanges(ctx, []schema.Change{
+			&schema.AddSchema{S: extNS},
+			&schema.ModifyObject{
+				From: ext,
+				To:   &postgres.Extension{Name: "hstore", Schema: extNS},
+			},
+		}))
+
+		r, err = t.drv.InspectRealm(ctx, &schema.InspectRealmOption{Mode: schema.InspectSchemas | schema.InspectObjects})
+		require.NoError(t, err)
+		ext = hasExt(r, "hstore")
+		require.NotNil(t, ext)
+		require.NotNil(t, ext.Schema)
+		require.Equal(t, "ext", ext.Schema.Name, "hstore should have been relocated")
+
+		// Drop it.
+		require.NoError(t, t.drv.ApplyChanges(ctx, []schema.Change{
+			&schema.DropObject{O: ext},
+		}))
+
+		r, err = t.drv.InspectRealm(ctx, &schema.InspectRealmOption{Mode: schema.InspectObjects})
+		require.NoError(t, err)
+		require.Nil(t, hasExt(r, "hstore"), "hstore should be gone after drop")
+	})
+}
+
 func TestPostgres_ForeignKey(t *testing.T) {
 	t.Run("ChangeAction", func(t *testing.T) {
 		pgRun(t, func(t *pgTest) {
