@@ -202,60 +202,6 @@ jobs:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
 
-  integration-postgres10:
-    runs-on: ubuntu-latest
-    services:
-      postgres10:
-        image: postgres:10
-        env:
-          POSTGRES_DB: test
-          POSTGRES_PASSWORD: pass
-        ports:
-          - 5430:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cmd/atlas/go.mod
-      - name: Run integration tests for postgres10
-        working-directory: internal/integration
-        run: go test -race -count=2 -v -run="Postgres" -version="postgres10" -timeout 15m ./...
-        env:
-          POSTGRES_DB: test
-          POSTGRES_PASSWORD: pass
-
-  integration-postgres11:
-    runs-on: ubuntu-latest
-    services:
-      postgres11:
-        image: postgres:11
-        env:
-          POSTGRES_DB: test
-          POSTGRES_PASSWORD: pass
-        ports:
-          - 5431:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cmd/atlas/go.mod
-      - name: Run integration tests for postgres11
-        working-directory: internal/integration
-        run: go test -race -count=2 -v -run="Postgres" -version="postgres11" -timeout 15m ./...
-        env:
-          POSTGRES_DB: test
-          POSTGRES_PASSWORD: pass
-
   integration-postgres12:
     runs-on: ubuntu-latest
     services:
@@ -360,6 +306,87 @@ jobs:
       - name: Run integration tests for postgres15
         working-directory: internal/integration
         run: go test -race -count=2 -v -run="Postgres" -version="postgres15" -timeout 15m ./...
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+
+  integration-postgres16:
+    runs-on: ubuntu-latest
+    services:
+      postgres16:
+        image: postgres:16
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5436:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/atlas/go.mod
+      - name: Run integration tests for postgres16
+        working-directory: internal/integration
+        run: go test -race -count=2 -v -run="Postgres" -version="postgres16" -timeout 15m ./...
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+
+  integration-postgres17:
+    runs-on: ubuntu-latest
+    services:
+      postgres17:
+        image: postgres:17
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5437:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/atlas/go.mod
+      - name: Run integration tests for postgres17
+        working-directory: internal/integration
+        run: go test -race -count=2 -v -run="Postgres" -version="postgres17" -timeout 15m ./...
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+
+  integration-postgres18:
+    runs-on: ubuntu-latest
+    services:
+      postgres18:
+        image: postgres:18
+        env:
+          POSTGRES_DB: test
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5438:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/atlas/go.mod
+      - name: Run integration tests for postgres18
+        working-directory: internal/integration
+        run: go test -race -count=2 -v -run="Postgres" -version="postgres18" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
