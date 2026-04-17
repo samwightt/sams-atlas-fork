@@ -15,6 +15,7 @@ Thanks goes to the original Atlas authors. Just like the original repo, this is 
 ## Currently implemnted features
 
 - [`--include` flag on `inspect`](https://atlasgo.io/faq/inspect-include-flag)
+- [Postgres extension support.](https://atlasgo.io/faq/postgres-extensions)
 
 ## Rest of the readme
 
