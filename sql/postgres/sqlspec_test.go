@@ -1135,6 +1135,23 @@ extension "adminpack" {
 	require.Nil(t, byName["adminpack"].Schema, "adminpack omitted schema should stay nil")
 }
 
+func TestUnmarshalSpec_Extension_SchemaScope(t *testing.T) {
+	// Extensions are realm-scoped. When an HCL document is evaluated
+	// against a *schema.Schema target, extension blocks are silently
+	// dropped (see the schema-scope branch in Codec.EvalOptions).
+	// This pin guards against a future change that would surface them.
+	f := `
+schema "public" {}
+extension "postgis" {
+  version = "3.4.1"
+}
+`
+	var s schema.Schema
+	require.NoError(t, EvalHCLBytes([]byte(f), &s, nil))
+	require.Equal(t, "public", s.Name)
+	require.Empty(t, s.Objects, "schema-scope eval must not surface extensions")
+}
+
 func TestUnmarshalSpec_Identity(t *testing.T) {
 	f := `
 schema "s" {}
