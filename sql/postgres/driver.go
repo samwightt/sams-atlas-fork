@@ -685,17 +685,19 @@ func (s *state) modifyObject(modify *schema.ModifyObject) error {
 			})
 		}
 		if to.Schema != nil && (from.Schema == nil || from.Schema.Name != to.Schema.Name) {
-			cmd := s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(to.Schema.Name).String()
-			rev := ""
-			if from.Schema != nil {
-				rev = s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(from.Schema.Name).String()
-			}
-			s.append(&migrate.Change{
+			// When from.Schema is nil the extension lived in a namespace
+			// outside the managed realm (e.g. pg_catalog). Atlas has no
+			// name to reverse to, so leave Reverse unset — SetReversible
+			// will flag the plan accordingly.
+			change := &migrate.Change{
 				Source:  modify,
-				Cmd:     cmd,
-				Reverse: rev,
+				Cmd:     s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(to.Schema.Name).String(),
 				Comment: fmt.Sprintf("relocate extension %q", to.Name),
-			})
+			}
+			if from.Schema != nil {
+				change.Reverse = s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(from.Schema.Name).String()
+			}
+			s.append(change)
 		}
 		return nil
 	}

@@ -1985,6 +1985,34 @@ func TestPlanChanges_Extensions(t *testing.T) {
 	}
 }
 
+func TestPlanChanges_ExtensionRelocateFromUnmanaged(t *testing.T) {
+	// When inspect saw the extension in a schema outside the managed
+	// realm (from.Schema == nil), atlas has no name to reverse to.
+	// The forward SQL is still emitted, but the plan is reported as
+	// non-reversible — consistent with how the codebase treats other
+	// unmanaged-schema references.
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	pub := schema.New("public")
+	changes := []schema.Change{
+		&schema.ModifyObject{
+			From: &Extension{Name: "adminpack"},
+			To:   &Extension{Name: "adminpack", Schema: pub},
+		},
+	}
+	plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+	require.NoError(t, err)
+	require.Len(t, plan.Changes, 1)
+	require.Equal(t, `ALTER EXTENSION "adminpack" SET SCHEMA "public"`, plan.Changes[0].Cmd)
+	require.Empty(t, plan.Changes[0].Reverse)
+	require.False(t, plan.Reversible, "plan must be flagged non-reversible when original schema is unknown")
+}
+
 func TestPlanChanges_ExtensionAfterSchema(t *testing.T) {
 	// Adding a schema and installing an extension into that schema
 	// in the same plan must order CREATE SCHEMA before CREATE
