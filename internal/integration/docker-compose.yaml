@@ -47,30 +47,6 @@ services:
     ports:
       - "5429:5432"
 
-  postgres10:
-    container_name: atlas-integration-postgres10
-    platform: linux/amd64
-    image: postgres:10
-    environment:
-      POSTGRES_DB: test
-      POSTGRES_PASSWORD: pass
-    healthcheck:
-      test: pg_isready -U postgres
-    ports:
-      - "5430:5432"
-
-  postgres11:
-    container_name: atlas-integration-postgres11
-    platform: linux/amd64
-    image: postgres:11
-    environment:
-      POSTGRES_DB: test
-      POSTGRES_PASSWORD: pass
-    healthcheck:
-      test: pg_isready -U postgres
-    ports:
-      - "5431:5432"
-
   postgres12:
     container_name: atlas-integration-postgres12
     platform: linux/amd64
@@ -118,6 +94,42 @@ services:
       test: pg_isready -U postgres
     ports:
       - "5435:5432"
+
+  postgres16:
+    container_name: atlas-integration-postgres16
+    platform: linux/amd64
+    image: postgres:16
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_PASSWORD: pass
+    healthcheck:
+      test: pg_isready -U postgres
+    ports:
+      - "5436:5432"
+
+  postgres17:
+    container_name: atlas-integration-postgres17
+    platform: linux/amd64
+    image: postgres:17
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_PASSWORD: pass
+    healthcheck:
+      test: pg_isready -U postgres
+    ports:
+      - "5437:5432"
+
+  postgres18:
+    container_name: atlas-integration-postgres18
+    platform: linux/amd64
+    image: postgres:18
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_PASSWORD: pass
+    healthcheck:
+      test: pg_isready -U postgres
+    ports:
+      - "5438:5432"
 
 
   mariadb:
