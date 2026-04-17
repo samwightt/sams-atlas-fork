@@ -1042,6 +1042,33 @@ schema "test" {
 	require.EqualValues(t, expected, string(buf))
 }
 
+func TestMarshalSpec_Extension(t *testing.T) {
+	r := schema.NewRealm(schema.New("public"))
+	r.Objects = append(r.Objects,
+		&Extension{Name: "adminpack", Version: "2.1", Comment: "administrative functions"},
+		&Extension{
+			Name:    "postgis",
+			Schema:  r.Schemas[0],
+			Version: "3.4.1",
+			Comment: "PostGIS spatial types",
+		},
+	)
+	buf, err := MarshalHCL(r)
+	require.NoError(t, err)
+	require.Equal(t, `extension "adminpack" {
+  version = "2.1"
+  comment = "administrative functions"
+}
+extension "postgis" {
+  schema  = schema.public
+  version = "3.4.1"
+  comment = "PostGIS spatial types"
+}
+schema "public" {
+}
+`, string(buf))
+}
+
 func TestUnmarshalSpec_Extension(t *testing.T) {
 	var (
 		r schema.Realm

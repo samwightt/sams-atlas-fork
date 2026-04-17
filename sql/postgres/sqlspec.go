@@ -297,6 +297,11 @@ func (c *Codec) MarshalSpec(v any) ([]byte, error) {
 			}
 			d.merge(d1)
 		}
+		for _, o := range rv.Objects {
+			if ext, ok := o.(*Extension); ok {
+				d.Extensions = append(d.Extensions, extensionSpec(ext))
+			}
+		}
 		if err := specutil.QualifyObjects(d.Tables); err != nil {
 			return nil, err
 		}
@@ -695,6 +700,19 @@ func enumName(ref *schemahcl.Type) (string, error) {
 		return "", fmt.Errorf("postgres: failed to extract enum name from %q", ref.T)
 	}
 	return s[1], nil
+}
+
+// extensionSpec converts a postgres.Extension into its HCL spec form.
+func extensionSpec(e *Extension) *extension {
+	spec := &extension{
+		Name:    e.Name,
+		Version: e.Version,
+		Comment: e.Comment,
+	}
+	if e.Schema != nil {
+		spec.Schema = specutil.SchemaRef(e.Schema.Name)
+	}
+	return spec
 }
 
 // schemaSpec converts from a concrete Postgres schema to Atlas specification.
