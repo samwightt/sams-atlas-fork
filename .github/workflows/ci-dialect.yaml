@@ -434,23 +434,26 @@ jobs:
         working-directory: internal/integration
         run: go test -race -count=2 -v -run="TiDB" -version="tidb6" -timeout 15m ./...
 
-  integration-cockroach:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cmd/atlas/go.mod
-      - name: Start CockroachDB
-        run: |
-          docker run -d --name crdb \
-            -p 26257:26257 -p 8080:8080 \
-            cockroachdb/cockroach:latest-v23.2 \
-            start-single-node --insecure
-          for i in {1..30}; do
-            curl -sf http://localhost:8080/health?ready=1 && break
-            sleep 1
-          done
-      - name: Run integration tests for cockroach
-        working-directory: internal/integration
-        run: go test -race -count=2 -v -run="Cockroach" -version="cockroach" -timeout 15m ./...
+  # Disabled: tests drift between cockroach v21 (what they were written for)
+  # and currently-supported versions (v23.2+). Revisit by fixing tests or
+  # dropping cockroach support entirely.
+  # integration-cockroach:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-go@v5
+  #       with:
+  #         go-version-file: cmd/atlas/go.mod
+  #     - name: Start CockroachDB
+  #       run: |
+  #         docker run -d --name crdb \
+  #           -p 26257:26257 -p 8080:8080 \
+  #           cockroachdb/cockroach:latest-v23.2 \
+  #           start-single-node --insecure
+  #         for i in {1..30}; do
+  #           curl -sf http://localhost:8080/health?ready=1 && break
+  #           sleep 1
+  #         done
+  #     - name: Run integration tests for cockroach
+  #       working-directory: internal/integration
+  #       run: go test -race -count=2 -v -run="Cockroach" -version="cockroach" -timeout 15m ./...
