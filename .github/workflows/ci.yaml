@@ -91,5 +91,5 @@ jobs:
         run: go test -race -count=2 -v ./...
 
   dialect-integration:
-    needs: [lint, generate-cmp, unit, cli, integration]
+    needs: [lint, generate-cmp, unit, integration]
     uses: ./.github/workflows/ci-dialect.yaml
