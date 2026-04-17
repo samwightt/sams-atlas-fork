@@ -78,8 +78,8 @@ type (
 	extension struct {
 		Name    string         `spec:",name"`
 		Schema  *schemahcl.Ref `spec:"schema"`
-		Version string         `spec:"version"`
-		Comment string         `spec:"comment"`
+		Version string         `spec:"version,omitempty"`
+		Comment string         `spec:"comment,omitempty"`
 		schemahcl.DefaultExtension
 	}
 

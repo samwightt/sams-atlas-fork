@@ -1069,6 +1069,36 @@ schema "public" {
 `, string(buf))
 }
 
+func TestMarshalSpec_Extension_Minimal(t *testing.T) {
+	// An Extension with only Name should emit a bare block — no
+	// version = "" or comment = "" noise. The control-file default
+	// applies when version is omitted, and comment is inspect-only.
+	r := schema.NewRealm(schema.New("public"))
+	r.Objects = append(r.Objects, &Extension{Name: "adminpack"})
+	buf, err := MarshalHCL(r)
+	require.NoError(t, err)
+	require.Equal(t, `extension "adminpack" {
+}
+schema "public" {
+}
+`, string(buf))
+}
+
+func TestUnmarshalSpec_Extension_Duplicate(t *testing.T) {
+	f := `
+schema "public" {}
+extension "postgis" {
+  version = "3.4.1"
+}
+extension "postgis" {
+  version = "3.4.2"
+}
+`
+	err := EvalHCLBytes([]byte(f), &schema.Realm{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `duplicate extension "postgis"`)
+}
+
 func TestUnmarshalSpec_Extension(t *testing.T) {
 	var (
 		r schema.Realm
