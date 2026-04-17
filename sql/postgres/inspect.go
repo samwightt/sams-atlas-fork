@@ -59,6 +59,11 @@ func (i *inspect) InspectRealm(ctx context.Context, opts *schema.InspectRealmOpt
 			sqlx.LinkSchemaTables(schemas)
 		}
 	}
+	if mode.Is(schema.InspectObjects) {
+		if err := i.inspectExtensions(ctx, r); err != nil {
+			return nil, err
+		}
+	}
 	if r, err = schema.ExcludeRealm(r, opts.Exclude); err != nil {
 		return nil, err
 	}

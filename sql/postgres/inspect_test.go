@@ -742,6 +742,89 @@ func TestInspectExtensions(t *testing.T) {
 	require.NoError(t, m.ExpectationsWereMet())
 }
 
+func TestInspectRealm_Extensions(t *testing.T) {
+	// InspectObjects mode should populate Realm.Objects with the
+	// extensions reported by pg_extension.
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	mk.ExpectQuery(sqltest.Escape("SELECT current_setting('search_path'), set_config('search_path', '', false)")).
+		WillReturnRows(sqltest.Rows(`
+ current_setting | set_config
+-----------------+------------
+                 |
+`))
+	mk.ExpectQuery(sqltest.Escape(schemasQuery)).
+		WillReturnRows(sqltest.Rows(`
+ schema_name | comment
+-------------+---------
+ public      | nil
+`))
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqltest.Rows(`
+ name      | schema      | version | comment
+-----------+-------------+---------+--------------------------------
+ postgis   | public      | 3.4.1   | PostGIS spatial types
+`))
+
+	realm, err := drv.InspectRealm(context.Background(), &schema.InspectRealmOption{
+		Mode: schema.InspectSchemas | schema.InspectObjects,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, realm.Objects, 1)
+	ext, ok := realm.Objects[0].(*Extension)
+	require.True(t, ok)
+	require.Equal(t, "postgis", ext.Name)
+	require.Equal(t, "3.4.1", ext.Version)
+
+	pub, _ := realm.Schema("public")
+	require.Same(t, pub, ext.Schema)
+
+	require.NoError(t, m.ExpectationsWereMet())
+}
+
+func TestInspectRealm_NoExtensions(t *testing.T) {
+	// A DB with pg_extension returning zero rows should leave
+	// Realm.Objects empty and not error.
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	mk.ExpectQuery(sqltest.Escape("SELECT current_setting('search_path'), set_config('search_path', '', false)")).
+		WillReturnRows(sqltest.Rows(`
+ current_setting | set_config
+-----------------+------------
+                 |
+`))
+	mk.ExpectQuery(sqltest.Escape(schemasQuery)).
+		WillReturnRows(sqltest.Rows(`
+ schema_name | comment
+-------------+---------
+ public      | nil
+`))
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqlmock.NewRows([]string{"name", "schema", "version", "comment"}))
+
+	realm, err := drv.InspectRealm(context.Background(), &schema.InspectRealmOption{
+		Mode: schema.InspectSchemas | schema.InspectObjects,
+	})
+	require.NoError(t, err)
+	require.Empty(t, realm.Objects)
+	require.NoError(t, m.ExpectationsWereMet())
+}
+
 func TestIndexOpClass_UnmarshalText(t *testing.T) {
 	var op IndexOpClass
 	require.NoError(t, op.UnmarshalText([]byte("int4_ops")))
