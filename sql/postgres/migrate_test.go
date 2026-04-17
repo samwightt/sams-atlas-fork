@@ -1985,6 +1985,39 @@ func TestPlanChanges_Extensions(t *testing.T) {
 	}
 }
 
+func TestPlanChanges_ExtensionAfterSchema(t *testing.T) {
+	// Adding a schema and installing an extension into that schema
+	// in the same plan must order CREATE SCHEMA before CREATE
+	// EXTENSION, otherwise Postgres rejects the reference.
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	ns := schema.New("gis")
+	changes := []schema.Change{
+		&schema.AddObject{O: &Extension{Name: "postgis", Schema: ns}},
+		&schema.AddSchema{S: ns},
+	}
+	plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+	require.NoError(t, err)
+
+	var schemaIdx, extIdx int = -1, -1
+	for i, c := range plan.Changes {
+		switch {
+		case c.Cmd == `CREATE SCHEMA "gis"` || c.Cmd == `CREATE SCHEMA IF NOT EXISTS "gis"`:
+			schemaIdx = i
+		case c.Cmd == `CREATE EXTENSION "postgis" WITH SCHEMA "gis"`:
+			extIdx = i
+		}
+	}
+	require.NotEqualf(t, -1, schemaIdx, "expected CREATE SCHEMA in plan, got %+v", plan.Changes)
+	require.NotEqualf(t, -1, extIdx, "expected CREATE EXTENSION in plan, got %+v", plan.Changes)
+	require.Lessf(t, schemaIdx, extIdx, "CREATE SCHEMA (%d) must precede CREATE EXTENSION (%d)", schemaIdx, extIdx)
+}
+
 func TestDefaultPlan(t *testing.T) {
 	changes, err := DefaultPlan.PlanChanges(context.Background(), "plan", []schema.Change{
 		&schema.AddTable{T: schema.NewTable("t1").SetSchema(schema.New("s1")).AddColumns(schema.NewIntColumn("a", "int"))},
