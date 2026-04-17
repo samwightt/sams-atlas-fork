@@ -697,6 +697,166 @@ func TestInspectMode_InspectRealm(t *testing.T) {
 	}(), realm)
 }
 
+func TestInspectExtensions(t *testing.T) {
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+	i := drv.(*Driver).Inspector.(*inspect)
+
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqltest.Rows(`
+ name      | schema      | version | comment
+-----------+-------------+---------+--------------------------------
+ adminpack | pg_catalog  | 2.1     | administrative functions for PostgreSQL
+ postgis   | public      | 3.4.1   | PostGIS spatial types
+`))
+
+	// pg_catalog is intentionally absent from the realm — it mirrors the
+	// standard schema filter in InspectRealm. adminpack's schema should
+	// stay nil; postgis should resolve to the managed public schema.
+	r := schema.NewRealm(schema.New("public"))
+	require.NoError(t, i.inspectExtensions(context.Background(), r))
+
+	require.Len(t, r.Objects, 2)
+	byName := map[string]*Extension{}
+	for _, o := range r.Objects {
+		ext, ok := o.(*Extension)
+		require.Truef(t, ok, "unexpected realm object %T", o)
+		byName[ext.Name] = ext
+	}
+
+	require.Equal(t, "2.1", byName["adminpack"].Version)
+	require.Equal(t, "administrative functions for PostgreSQL", byName["adminpack"].Comment)
+	require.Nil(t, byName["adminpack"].Schema, "extension in unmanaged schema should have nil Schema")
+
+	pub, _ := r.Schema("public")
+	require.Equal(t, "3.4.1", byName["postgis"].Version)
+	require.Equal(t, "PostGIS spatial types", byName["postgis"].Comment)
+	require.Same(t, pub, byName["postgis"].Schema)
+
+	require.NoError(t, m.ExpectationsWereMet())
+}
+
+func TestInspectRealm_Extensions(t *testing.T) {
+	// InspectObjects mode should populate Realm.Objects with the
+	// extensions reported by pg_extension.
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	mk.ExpectQuery(sqltest.Escape("SELECT current_setting('search_path'), set_config('search_path', '', false)")).
+		WillReturnRows(sqltest.Rows(`
+ current_setting | set_config
+-----------------+------------
+                 |
+`))
+	mk.ExpectQuery(sqltest.Escape(schemasQuery)).
+		WillReturnRows(sqltest.Rows(`
+ schema_name | comment
+-------------+---------
+ public      | nil
+`))
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqltest.Rows(`
+ name      | schema      | version | comment
+-----------+-------------+---------+--------------------------------
+ postgis   | public      | 3.4.1   | PostGIS spatial types
+`))
+
+	realm, err := drv.InspectRealm(context.Background(), &schema.InspectRealmOption{
+		Mode: schema.InspectSchemas | schema.InspectObjects,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, realm.Objects, 1)
+	ext, ok := realm.Objects[0].(*Extension)
+	require.True(t, ok)
+	require.Equal(t, "postgis", ext.Name)
+	require.Equal(t, "3.4.1", ext.Version)
+
+	pub, _ := realm.Schema("public")
+	require.Same(t, pub, ext.Schema)
+
+	require.NoError(t, m.ExpectationsWereMet())
+}
+
+func TestInspectExtensions_FiltersAutoInstalled(t *testing.T) {
+	// plpgsql is installed in every database created from template1
+	// (the default). Surfacing it would make every user's first diff
+	// try to DROP EXTENSION "plpgsql", breaking stored functions — so
+	// inspect filters it out by default.
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+	i := drv.(*Driver).Inspector.(*inspect)
+
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqltest.Rows(`
+ name      | schema      | version | comment
+-----------+-------------+---------+--------------------------------
+ plpgsql   | pg_catalog  | 1.0     | PL/pgSQL procedural language
+ postgis   | public      | 3.4.1   | PostGIS spatial types
+`))
+
+	r := schema.NewRealm(schema.New("public"))
+	require.NoError(t, i.inspectExtensions(context.Background(), r))
+
+	require.Len(t, r.Objects, 1, "plpgsql should be filtered out")
+	ext, ok := r.Objects[0].(*Extension)
+	require.True(t, ok)
+	require.Equal(t, "postgis", ext.Name)
+}
+
+func TestInspectRealm_NoExtensions(t *testing.T) {
+	// A DB with pg_extension returning zero rows should leave
+	// Realm.Objects empty and not error.
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	mk.ExpectQuery(sqltest.Escape("SELECT current_setting('search_path'), set_config('search_path', '', false)")).
+		WillReturnRows(sqltest.Rows(`
+ current_setting | set_config
+-----------------+------------
+                 |
+`))
+	mk.ExpectQuery(sqltest.Escape(schemasQuery)).
+		WillReturnRows(sqltest.Rows(`
+ schema_name | comment
+-------------+---------
+ public      | nil
+`))
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqlmock.NewRows([]string{"name", "schema", "version", "comment"}))
+
+	realm, err := drv.InspectRealm(context.Background(), &schema.InspectRealmOption{
+		Mode: schema.InspectSchemas | schema.InspectObjects,
+	})
+	require.NoError(t, err)
+	require.Empty(t, realm.Objects)
+	require.NoError(t, m.ExpectationsWereMet())
+}
+
 func TestIndexOpClass_UnmarshalText(t *testing.T) {
 	var op IndexOpClass
 	require.NoError(t, op.UnmarshalText([]byte("int4_ops")))

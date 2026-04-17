@@ -1873,6 +1873,224 @@ func TestPlanChanges(t *testing.T) {
 	}
 }
 
+func TestPlanChanges_Extensions(t *testing.T) {
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	pub := schema.New("public")
+	ext := schema.New("ext")
+	type tc struct {
+		name    string
+		changes []schema.Change
+		want    []*migrate.Change
+	}
+	cases := []tc{
+		{
+			name: "bare create",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "adminpack"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "adminpack"`, Reverse: `DROP EXTENSION "adminpack"`},
+			},
+		},
+		{
+			name: "create with version",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "postgis", Version: "3.4.1"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "postgis" WITH VERSION '3.4.1'`, Reverse: `DROP EXTENSION "postgis"`},
+			},
+		},
+		{
+			name: "create with schema",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "postgis", Schema: pub}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "postgis" WITH SCHEMA "public"`, Reverse: `DROP EXTENSION "postgis"`},
+			},
+		},
+		{
+			name: "create with schema and version",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "postgis", Schema: pub, Version: "3.4.1"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "postgis" WITH SCHEMA "public" VERSION '3.4.1'`, Reverse: `DROP EXTENSION "postgis"`},
+			},
+		},
+		{
+			name: "drop",
+			changes: []schema.Change{
+				&schema.DropObject{O: &Extension{Name: "postgis", Schema: pub, Version: "3.4.1"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `DROP EXTENSION "postgis"`, Reverse: `CREATE EXTENSION "postgis" WITH SCHEMA "public" VERSION '3.4.1'`},
+			},
+		},
+		{
+			name: "alter version",
+			changes: []schema.Change{
+				&schema.ModifyObject{
+					From: &Extension{Name: "postgis", Version: "3.4.1"},
+					To:   &Extension{Name: "postgis", Version: "3.4.2"},
+				},
+			},
+			want: []*migrate.Change{
+				{Cmd: `ALTER EXTENSION "postgis" UPDATE TO '3.4.2'`, Reverse: `ALTER EXTENSION "postgis" UPDATE TO '3.4.1'`},
+			},
+		},
+		{
+			name: "alter schema",
+			changes: []schema.Change{
+				&schema.ModifyObject{
+					From: &Extension{Name: "postgis", Schema: pub},
+					To:   &Extension{Name: "postgis", Schema: ext},
+				},
+			},
+			want: []*migrate.Change{
+				{Cmd: `ALTER EXTENSION "postgis" SET SCHEMA "ext"`, Reverse: `ALTER EXTENSION "postgis" SET SCHEMA "public"`},
+			},
+		},
+		{
+			name: "alter both",
+			changes: []schema.Change{
+				&schema.ModifyObject{
+					From: &Extension{Name: "postgis", Schema: pub, Version: "3.4.1"},
+					To:   &Extension{Name: "postgis", Schema: ext, Version: "3.4.2"},
+				},
+			},
+			want: []*migrate.Change{
+				{Cmd: `ALTER EXTENSION "postgis" UPDATE TO '3.4.2'`, Reverse: `ALTER EXTENSION "postgis" UPDATE TO '3.4.1'`},
+				{Cmd: `ALTER EXTENSION "postgis" SET SCHEMA "ext"`, Reverse: `ALTER EXTENSION "postgis" SET SCHEMA "public"`},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, err := drv.PlanChanges(context.Background(), "plan", tc.changes)
+			require.NoError(t, err)
+			require.Len(t, plan.Changes, len(tc.want))
+			for i, c := range plan.Changes {
+				require.Equal(t, tc.want[i].Cmd, c.Cmd, "cmd")
+				require.Equal(t, tc.want[i].Reverse, c.Reverse, "reverse")
+			}
+		})
+	}
+}
+
+func TestPlanChanges_ExtensionRelocateFromUnmanaged(t *testing.T) {
+	// When inspect saw the extension in a schema outside the managed
+	// realm (from.Schema == nil), atlas has no name to reverse to.
+	// The forward SQL is still emitted, but the plan is reported as
+	// non-reversible — consistent with how the codebase treats other
+	// unmanaged-schema references.
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	pub := schema.New("public")
+	changes := []schema.Change{
+		&schema.ModifyObject{
+			From: &Extension{Name: "adminpack"},
+			To:   &Extension{Name: "adminpack", Schema: pub},
+		},
+	}
+	plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+	require.NoError(t, err)
+	require.Len(t, plan.Changes, 1)
+	require.Equal(t, `ALTER EXTENSION "adminpack" SET SCHEMA "public"`, plan.Changes[0].Cmd)
+	require.Empty(t, plan.Changes[0].Reverse)
+	require.False(t, plan.Reversible, "plan must be flagged non-reversible when original schema is unknown")
+}
+
+func TestPlanChanges_ExtensionClauses(t *testing.T) {
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	t.Run("add with IfNotExists", func(t *testing.T) {
+		changes := []schema.Change{
+			&schema.AddObject{
+				O:     &Extension{Name: "postgis", Version: "3.4.1"},
+				Extra: []schema.Clause{&schema.IfNotExists{}},
+			},
+		}
+		plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+		require.NoError(t, err)
+		require.Equal(t, `CREATE EXTENSION IF NOT EXISTS "postgis" WITH VERSION '3.4.1'`, plan.Changes[0].Cmd)
+		require.Equal(t, `DROP EXTENSION "postgis"`, plan.Changes[0].Reverse)
+	})
+
+	t.Run("drop with Cascade", func(t *testing.T) {
+		changes := []schema.Change{
+			&schema.DropObject{
+				O:     &Extension{Name: "postgis", Version: "3.4.1"},
+				Extra: []schema.Clause{&Cascade{}},
+			},
+		}
+		plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+		require.NoError(t, err)
+		require.Equal(t, `DROP EXTENSION "postgis" CASCADE`, plan.Changes[0].Cmd)
+		// Reverse is a plain CREATE EXTENSION; CASCADE is a drop-only clause.
+		require.Equal(t, `CREATE EXTENSION "postgis" WITH VERSION '3.4.1'`, plan.Changes[0].Reverse)
+	})
+
+	t.Run("add without IfNotExists still emits bare CREATE", func(t *testing.T) {
+		changes := []schema.Change{
+			&schema.AddObject{O: &Extension{Name: "postgis"}},
+		}
+		plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+		require.NoError(t, err)
+		require.Equal(t, `CREATE EXTENSION "postgis"`, plan.Changes[0].Cmd)
+	})
+}
+
+func TestPlanChanges_ExtensionAfterSchema(t *testing.T) {
+	// Adding a schema and installing an extension into that schema
+	// in the same plan must order CREATE SCHEMA before CREATE
+	// EXTENSION, otherwise Postgres rejects the reference.
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	ns := schema.New("gis")
+	changes := []schema.Change{
+		&schema.AddObject{O: &Extension{Name: "postgis", Schema: ns}},
+		&schema.AddSchema{S: ns},
+	}
+	plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+	require.NoError(t, err)
+
+	var schemaIdx, extIdx int = -1, -1
+	for i, c := range plan.Changes {
+		switch {
+		case c.Cmd == `CREATE SCHEMA "gis"` || c.Cmd == `CREATE SCHEMA IF NOT EXISTS "gis"`:
+			schemaIdx = i
+		case c.Cmd == `CREATE EXTENSION "postgis" WITH SCHEMA "gis"`:
+			extIdx = i
+		}
+	}
+	require.NotEqualf(t, -1, schemaIdx, "expected CREATE SCHEMA in plan, got %+v", plan.Changes)
+	require.NotEqualf(t, -1, extIdx, "expected CREATE EXTENSION in plan, got %+v", plan.Changes)
+	require.Lessf(t, schemaIdx, extIdx, "CREATE SCHEMA (%d) must precede CREATE EXTENSION (%d)", schemaIdx, extIdx)
+}
+
 func TestDefaultPlan(t *testing.T) {
 	changes, err := DefaultPlan.PlanChanges(context.Background(), "plan", []schema.Change{
 		&schema.AddTable{T: schema.NewTable("t1").SetSchema(schema.New("s1")).AddColumns(schema.NewIntColumn("a", "int"))},

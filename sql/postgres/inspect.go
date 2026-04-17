@@ -59,6 +59,11 @@ func (i *inspect) InspectRealm(ctx context.Context, opts *schema.InspectRealmOpt
 			sqlx.LinkSchemaTables(schemas)
 		}
 	}
+	if mode.Is(schema.InspectObjects) {
+		if err := i.inspectExtensions(ctx, r); err != nil {
+			return nil, err
+		}
+	}
 	if r, err = schema.ExcludeRealm(r, opts.Exclude); err != nil {
 		return nil, err
 	}
@@ -420,6 +425,42 @@ func (i *inspect) inspectEnums(ctx context.Context, r *schema.Realm) error {
 		e.Values = append(e.Values, v)
 	}
 	return nil
+}
+
+// autoInstalledExtensions are extensions shipped and installed by
+// PostgreSQL's default template1, so they appear in virtually every
+// database. Surfacing them in inspect output would cause spurious
+// DROP EXTENSION diffs against HCL files that omit them.
+var autoInstalledExtensions = map[string]bool{
+	"plpgsql": true,
+}
+
+// inspectExtensions queries pg_extension and appends the installed
+// extensions onto r.Objects. An extension whose host schema is not
+// part of the managed realm (e.g. pg_catalog for system extensions)
+// is still recorded, with its Schema left nil. Auto-installed
+// extensions (see autoInstalledExtensions) are filtered out.
+func (i *inspect) inspectExtensions(ctx context.Context, r *schema.Realm) error {
+	rows, err := i.QueryContext(ctx, extensionsQuery)
+	if err != nil {
+		return fmt.Errorf("postgres: querying extensions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, ns, version, comment string
+		if err := rows.Scan(&name, &ns, &version, &comment); err != nil {
+			return fmt.Errorf("postgres: scanning extension: %w", err)
+		}
+		if autoInstalledExtensions[name] {
+			continue
+		}
+		ext := &Extension{Name: name, Version: version, Comment: comment}
+		if s, ok := r.Schema(ns); ok {
+			ext.Schema = s
+		}
+		r.Objects = append(r.Objects, ext)
+	}
+	return rows.Err()
 }
 
 // indexes queries and appends the indexes of the given table.
@@ -1017,6 +1058,19 @@ type (
 		Attrs []schema.Attr
 	}
 
+	// Extension describes a PostgreSQL extension installed at the
+	// database (realm) level. An extension block can be relocated into
+	// a target schema when the extension's control file permits it,
+	// but the extension itself exists once per database.
+	// https://www.postgresql.org/docs/current/sql-createextension.html
+	Extension struct {
+		schema.Object
+		Name    string         // Extension name, e.g. "postgis".
+		Schema  *schema.Schema // Optional schema where the extension's objects are installed.
+		Version string         // Optional version of the extension. Defaults to the extension's control-file default.
+		Comment string         // Extension description, populated on inspect from the extension's control file.
+	}
+
 	// Sequence defines (the supported) sequence options.
 	// https://postgresql.org/docs/current/sql-createsequence.html
 	Sequence struct {
@@ -1520,6 +1574,21 @@ WHERE
 	t1.table_schema = $1 AND t1.table_name IN (%s)
 ORDER BY
 	t1.table_name, t1.ordinal_position
+`
+	// Query to list installed extensions together with the schema
+	// they are relocated into and their control-file description.
+	extensionsQuery = `
+SELECT
+    e.extname AS name,
+    n.nspname AS schema,
+    e.extversion AS version,
+    COALESCE(a.comment, '') AS comment
+FROM
+    pg_extension e
+    JOIN pg_namespace n ON e.extnamespace = n.oid
+    LEFT JOIN pg_available_extensions a ON a.name = e.extname
+ORDER BY
+    e.extname
 `
 	// Query to list enum values.
 	enumsQuery = `

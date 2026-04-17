@@ -622,7 +622,6 @@ func (s *state) alterTableAttr(*sqlx.Builder, *schema.ModifyAttr) {
 	// unimplemented.
 }
 
-
 func (s *state) addObject(add *schema.AddObject) error {
 	switch o := add.O.(type) {
 	case *schema.EnumType:
@@ -632,6 +631,14 @@ func (s *state) addObject(add *schema.AddObject) error {
 			Cmd:     create,
 			Reverse: drop,
 			Comment: fmt.Sprintf("create enum type %q", o.T),
+		})
+	case *Extension:
+		create, drop := s.createDropExtension(o, sqlx.Has(add.Extra, &schema.IfNotExists{}))
+		s.append(&migrate.Change{
+			Source:  add,
+			Cmd:     create,
+			Reverse: drop,
+			Comment: fmt.Sprintf("create extension %q", o.Name),
 		})
 	default:
 		// unsupported object type.
@@ -649,6 +656,17 @@ func (s *state) dropObject(drop *schema.DropObject) error {
 			Reverse: create,
 			Comment: fmt.Sprintf("drop enum type %q", o.T),
 		})
+	case *Extension:
+		create, dropE := s.createDropExtension(o, false)
+		if sqlx.Has(drop.Extra, &Cascade{}) {
+			dropE += " CASCADE"
+		}
+		s.append(&migrate.Change{
+			Source:  drop,
+			Cmd:     dropE,
+			Reverse: create,
+			Comment: fmt.Sprintf("drop extension %q", o.Name),
+		})
 	default:
 		// unsupported object type.
 	}
@@ -659,14 +677,106 @@ func (s *state) modifyObject(modify *schema.ModifyObject) error {
 	if _, ok := modify.From.(*schema.EnumType); ok {
 		return s.alterEnum(modify)
 	}
+	if from, ok := modify.From.(*Extension); ok {
+		to := modify.To.(*Extension)
+		if to.Version != "" && from.Version != to.Version {
+			s.append(&migrate.Change{
+				Source:  modify,
+				Cmd:     s.Build("ALTER EXTENSION").Ident(to.Name).P("UPDATE TO", quote(to.Version)).String(),
+				Reverse: s.Build("ALTER EXTENSION").Ident(to.Name).P("UPDATE TO", quote(from.Version)).String(),
+				Comment: fmt.Sprintf("update extension %q version", to.Name),
+			})
+		}
+		if to.Schema != nil && (from.Schema == nil || from.Schema.Name != to.Schema.Name) {
+			// When from.Schema is nil the extension lived in a namespace
+			// outside the managed realm (e.g. pg_catalog). Atlas has no
+			// name to reverse to, so leave Reverse unset — SetReversible
+			// will flag the plan accordingly.
+			change := &migrate.Change{
+				Source:  modify,
+				Cmd:     s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(to.Schema.Name).String(),
+				Comment: fmt.Sprintf("relocate extension %q", to.Name),
+			}
+			if from.Schema != nil {
+				change.Reverse = s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(from.Schema.Name).String()
+			}
+			s.append(change)
+		}
+		return nil
+	}
 	return nil // unimplemented.
 }
 
+// createDropExtension builds the CREATE EXTENSION / DROP EXTENSION
+// statement pair for the given Extension. Schema and Version are only
+// emitted when explicitly set on the desired state. ifNotExists adds
+// the matching clause to the CREATE statement.
+func (s *state) createDropExtension(e *Extension, ifNotExists bool) (string, string) {
+	b := s.Build("CREATE EXTENSION")
+	if ifNotExists {
+		b.P("IF NOT EXISTS")
+	}
+	b.Ident(e.Name)
+	if e.Schema != nil || e.Version != "" {
+		b.P("WITH")
+		if e.Schema != nil {
+			b.P("SCHEMA").Ident(e.Schema.Name)
+		}
+		if e.Version != "" {
+			b.P("VERSION", quote(e.Version))
+		}
+	}
+	return b.String(), s.Build("DROP EXTENSION").Ident(e.Name).String()
+}
 
 // RealmObjectDiff returns a changeset for migrating realm (database) objects
 // from one state to the other. For example, adding extensions or users.
-func (*diff) RealmObjectDiff(_, _ *schema.Realm) ([]schema.Change, error) {
-	return nil, nil // unimplemented.
+func (*diff) RealmObjectDiff(from, to *schema.Realm) ([]schema.Change, error) {
+	var changes []schema.Change
+	fromExt, toExt := extensionsOf(from), extensionsOf(to)
+	for name, f := range fromExt {
+		t, ok := toExt[name]
+		if !ok {
+			changes = append(changes, &schema.DropObject{O: f})
+			continue
+		}
+		if extensionChanged(f, t) {
+			changes = append(changes, &schema.ModifyObject{From: f, To: t})
+		}
+	}
+	for name, t := range toExt {
+		if _, ok := fromExt[name]; !ok {
+			changes = append(changes, &schema.AddObject{O: t})
+		}
+	}
+	return changes, nil
+}
+
+// extensionsOf indexes a realm's Extension objects by name.
+func extensionsOf(r *schema.Realm) map[string]*Extension {
+	m := make(map[string]*Extension)
+	for _, o := range r.Objects {
+		if e, ok := o.(*Extension); ok {
+			m[e.Name] = e
+		}
+	}
+	return m
+}
+
+// extensionChanged reports whether the desired extension meaningfully
+// differs from the current one. Unset fields on the desired side (empty
+// Version, nil Schema) mean "don't manage this axis" and never trigger a
+// diff. Comment is inspect-populated and intentionally ignored.
+func extensionChanged(from, to *Extension) bool {
+	if to.Version != "" && from.Version != to.Version {
+		return true
+	}
+	if to.Schema != nil {
+		if from.Schema == nil || from.Schema.Name != to.Schema.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // SchemaObjectDiff returns a changeset for migrating schema objects from
@@ -735,9 +845,26 @@ func convertPolicies(_ []*sqlspec.Table, ps []*policy, _ *schema.Realm) error {
 	return nil
 }
 
-func convertExtensions(exs []*extension, _ *schema.Realm) error {
-	if len(exs) > 0 {
-		return fmt.Errorf("postgres: extensions are not supported by this version. Use: https://atlasgo.io/getting-started")
+func convertExtensions(exs []*extension, r *schema.Realm) error {
+	seen := make(map[string]bool, len(exs))
+	for _, e := range exs {
+		if seen[e.Name] {
+			return fmt.Errorf("duplicate extension %q", e.Name)
+		}
+		seen[e.Name] = true
+		ext := &Extension{Name: e.Name, Version: e.Version, Comment: e.Comment}
+		if e.Schema != nil {
+			ns, err := specutil.SchemaName(e.Schema)
+			if err != nil {
+				return fmt.Errorf("extract schema name from extension %q: %w", e.Name, err)
+			}
+			s, ok := r.Schema(ns)
+			if !ok {
+				return fmt.Errorf("schema %q defined on extension %q was not found in realm", ns, e.Name)
+			}
+			ext.Schema = s
+		}
+		r.Objects = append(r.Objects, ext)
 	}
 	return nil
 }

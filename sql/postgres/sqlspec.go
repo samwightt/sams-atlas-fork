@@ -76,9 +76,10 @@ type (
 	// extension holds a specification for a postgres extension.
 	// Note, extension names are unique within a realm (database).
 	extension struct {
-		Name string `spec:",name"`
-		// Schema, version and comment are conditionally
-		// added to the extension definition.
+		Name    string         `spec:",name"`
+		Schema  *schemahcl.Ref `spec:"schema"`
+		Version string         `spec:"version,omitempty"`
+		Comment string         `spec:"comment,omitempty"`
 		schemahcl.DefaultExtension
 	}
 
@@ -295,6 +296,11 @@ func (c *Codec) MarshalSpec(v any) ([]byte, error) {
 				return nil, fmt.Errorf("specutil: failed converting schema to spec: %w", err)
 			}
 			d.merge(d1)
+		}
+		for _, o := range rv.Objects {
+			if ext, ok := o.(*Extension); ok {
+				d.Extensions = append(d.Extensions, extensionSpec(ext))
+			}
 		}
 		if err := specutil.QualifyObjects(d.Tables); err != nil {
 			return nil, err
@@ -694,6 +700,19 @@ func enumName(ref *schemahcl.Type) (string, error) {
 		return "", fmt.Errorf("postgres: failed to extract enum name from %q", ref.T)
 	}
 	return s[1], nil
+}
+
+// extensionSpec converts a postgres.Extension into its HCL spec form.
+func extensionSpec(e *Extension) *extension {
+	spec := &extension{
+		Name:    e.Name,
+		Version: e.Version,
+		Comment: e.Comment,
+	}
+	if e.Schema != nil {
+		spec.Schema = specutil.SchemaRef(e.Schema.Name)
+	}
+	return spec
 }
 
 // schemaSpec converts from a concrete Postgres schema to Atlas specification.

@@ -1042,6 +1042,116 @@ schema "test" {
 	require.EqualValues(t, expected, string(buf))
 }
 
+func TestMarshalSpec_Extension(t *testing.T) {
+	r := schema.NewRealm(schema.New("public"))
+	r.Objects = append(r.Objects,
+		&Extension{Name: "adminpack", Version: "2.1", Comment: "administrative functions"},
+		&Extension{
+			Name:    "postgis",
+			Schema:  r.Schemas[0],
+			Version: "3.4.1",
+			Comment: "PostGIS spatial types",
+		},
+	)
+	buf, err := MarshalHCL(r)
+	require.NoError(t, err)
+	require.Equal(t, `extension "adminpack" {
+  version = "2.1"
+  comment = "administrative functions"
+}
+extension "postgis" {
+  schema  = schema.public
+  version = "3.4.1"
+  comment = "PostGIS spatial types"
+}
+schema "public" {
+}
+`, string(buf))
+}
+
+func TestMarshalSpec_Extension_Minimal(t *testing.T) {
+	// An Extension with only Name should emit a bare block — no
+	// version = "" or comment = "" noise. The control-file default
+	// applies when version is omitted, and comment is inspect-only.
+	r := schema.NewRealm(schema.New("public"))
+	r.Objects = append(r.Objects, &Extension{Name: "adminpack"})
+	buf, err := MarshalHCL(r)
+	require.NoError(t, err)
+	require.Equal(t, `extension "adminpack" {
+}
+schema "public" {
+}
+`, string(buf))
+}
+
+func TestUnmarshalSpec_Extension_Duplicate(t *testing.T) {
+	f := `
+schema "public" {}
+extension "postgis" {
+  version = "3.4.1"
+}
+extension "postgis" {
+  version = "3.4.2"
+}
+`
+	err := EvalHCLBytes([]byte(f), &schema.Realm{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `duplicate extension "postgis"`)
+}
+
+func TestUnmarshalSpec_Extension(t *testing.T) {
+	var (
+		r schema.Realm
+		f = `
+schema "public" {}
+extension "postgis" {
+  schema  = schema.public
+  version = "3.4.1"
+}
+extension "adminpack" {
+  version = "2.1"
+}
+`
+	)
+	require.NoError(t, EvalHCLBytes([]byte(f), &r, nil))
+
+	pub, ok := r.Schema("public")
+	require.True(t, ok, "public schema should be present")
+
+	require.Len(t, r.Objects, 2, "both extensions should live on the realm")
+	byName := map[string]*Extension{}
+	for _, o := range r.Objects {
+		ext, ok := o.(*Extension)
+		require.Truef(t, ok, "unexpected realm object type %T", o)
+		byName[ext.Name] = ext
+	}
+
+	require.Contains(t, byName, "postgis")
+	require.Equal(t, "3.4.1", byName["postgis"].Version)
+	require.Same(t, pub, byName["postgis"].Schema)
+
+	require.Contains(t, byName, "adminpack")
+	require.Equal(t, "2.1", byName["adminpack"].Version)
+	require.Nil(t, byName["adminpack"].Schema, "adminpack omitted schema should stay nil")
+}
+
+func TestUnmarshalSpec_Extension_SchemaScope(t *testing.T) {
+	// Extensions are realm-scoped. When an HCL document is evaluated
+	// against a *schema.Schema target, extension blocks are silently
+	// dropped (see the schema-scope branch in Codec.EvalOptions).
+	// This pin guards against a future change that would surface them.
+	f := `
+schema "public" {}
+extension "postgis" {
+  version = "3.4.1"
+}
+`
+	var s schema.Schema
+	require.NoError(t, EvalHCLBytes([]byte(f), &s, nil))
+	require.Equal(t, "public", s.Name)
+	require.Empty(t, s.Objects, "schema-scope eval must not surface extensions")
+}
+
 func TestUnmarshalSpec_Identity(t *testing.T) {
 	f := `
 schema "s" {}
