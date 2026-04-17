@@ -633,7 +633,7 @@ func (s *state) addObject(add *schema.AddObject) error {
 			Comment: fmt.Sprintf("create enum type %q", o.T),
 		})
 	case *Extension:
-		create, drop := s.createDropExtension(o)
+		create, drop := s.createDropExtension(o, sqlx.Has(add.Extra, &schema.IfNotExists{}))
 		s.append(&migrate.Change{
 			Source:  add,
 			Cmd:     create,
@@ -657,7 +657,10 @@ func (s *state) dropObject(drop *schema.DropObject) error {
 			Comment: fmt.Sprintf("drop enum type %q", o.T),
 		})
 	case *Extension:
-		create, dropE := s.createDropExtension(o)
+		create, dropE := s.createDropExtension(o, false)
+		if sqlx.Has(drop.Extra, &Cascade{}) {
+			dropE += " CASCADE"
+		}
 		s.append(&migrate.Change{
 			Source:  drop,
 			Cmd:     dropE,
@@ -706,9 +709,14 @@ func (s *state) modifyObject(modify *schema.ModifyObject) error {
 
 // createDropExtension builds the CREATE EXTENSION / DROP EXTENSION
 // statement pair for the given Extension. Schema and Version are only
-// emitted when explicitly set on the desired state.
-func (s *state) createDropExtension(e *Extension) (string, string) {
-	b := s.Build("CREATE EXTENSION").Ident(e.Name)
+// emitted when explicitly set on the desired state. ifNotExists adds
+// the matching clause to the CREATE statement.
+func (s *state) createDropExtension(e *Extension, ifNotExists bool) (string, string) {
+	b := s.Build("CREATE EXTENSION")
+	if ifNotExists {
+		b.P("IF NOT EXISTS")
+	}
+	b.Ident(e.Name)
 	if e.Schema != nil || e.Version != "" {
 		b.P("WITH")
 		if e.Schema != nil {

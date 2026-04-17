@@ -2013,6 +2013,51 @@ func TestPlanChanges_ExtensionRelocateFromUnmanaged(t *testing.T) {
 	require.False(t, plan.Reversible, "plan must be flagged non-reversible when original schema is unknown")
 }
 
+func TestPlanChanges_ExtensionClauses(t *testing.T) {
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	t.Run("add with IfNotExists", func(t *testing.T) {
+		changes := []schema.Change{
+			&schema.AddObject{
+				O:     &Extension{Name: "postgis", Version: "3.4.1"},
+				Extra: []schema.Clause{&schema.IfNotExists{}},
+			},
+		}
+		plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+		require.NoError(t, err)
+		require.Equal(t, `CREATE EXTENSION IF NOT EXISTS "postgis" WITH VERSION '3.4.1'`, plan.Changes[0].Cmd)
+		require.Equal(t, `DROP EXTENSION "postgis"`, plan.Changes[0].Reverse)
+	})
+
+	t.Run("drop with Cascade", func(t *testing.T) {
+		changes := []schema.Change{
+			&schema.DropObject{
+				O:     &Extension{Name: "postgis", Version: "3.4.1"},
+				Extra: []schema.Clause{&Cascade{}},
+			},
+		}
+		plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+		require.NoError(t, err)
+		require.Equal(t, `DROP EXTENSION "postgis" CASCADE`, plan.Changes[0].Cmd)
+		// Reverse is a plain CREATE EXTENSION; CASCADE is a drop-only clause.
+		require.Equal(t, `CREATE EXTENSION "postgis" WITH VERSION '3.4.1'`, plan.Changes[0].Reverse)
+	})
+
+	t.Run("add without IfNotExists still emits bare CREATE", func(t *testing.T) {
+		changes := []schema.Change{
+			&schema.AddObject{O: &Extension{Name: "postgis"}},
+		}
+		plan, err := drv.PlanChanges(context.Background(), "plan", changes)
+		require.NoError(t, err)
+		require.Equal(t, `CREATE EXTENSION "postgis"`, plan.Changes[0].Cmd)
+	})
+}
+
 func TestPlanChanges_ExtensionAfterSchema(t *testing.T) {
 	// Adding a schema and installing an extension into that schema
 	// in the same plan must order CREATE SCHEMA before CREATE
