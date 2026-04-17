@@ -380,6 +380,9 @@ func testCLISchemaInspectEnv(t T, h string, env string, eval schemahcl.Evaluator
 var initOnce sync.Once
 
 func execPath(t testing.TB) string {
+	if p := os.Getenv("ATLAS_TEST_BINARY"); p != "" {
+		return p
+	}
 	initOnce.Do(func() {
 		args := []string{
 			"build",
@@ -780,6 +783,9 @@ var (
 )
 
 func cliPath(t testing.TB) string {
+	if p := os.Getenv("ATLAS_TEST_BINARY"); p != "" {
+		return p
+	}
 	path := filepath.Join(os.TempDir(), "atlas")
 	buildOnce.Do(func() {
 		args := append([]string{"build"}, buildFlags...)
