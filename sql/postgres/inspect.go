@@ -422,6 +422,30 @@ func (i *inspect) inspectEnums(ctx context.Context, r *schema.Realm) error {
 	return nil
 }
 
+// inspectExtensions queries pg_extension and appends the installed
+// extensions onto r.Objects. An extension whose host schema is not
+// part of the managed realm (e.g. pg_catalog for system extensions)
+// is still recorded, with its Schema left nil.
+func (i *inspect) inspectExtensions(ctx context.Context, r *schema.Realm) error {
+	rows, err := i.QueryContext(ctx, extensionsQuery)
+	if err != nil {
+		return fmt.Errorf("postgres: querying extensions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, ns, version, comment string
+		if err := rows.Scan(&name, &ns, &version, &comment); err != nil {
+			return fmt.Errorf("postgres: scanning extension: %w", err)
+		}
+		ext := &Extension{Name: name, Version: version, Comment: comment}
+		if s, ok := r.Schema(ns); ok {
+			ext.Schema = s
+		}
+		r.Objects = append(r.Objects, ext)
+	}
+	return rows.Err()
+}
+
 // indexes queries and appends the indexes of the given table.
 func (i *inspect) indexes(ctx context.Context, s *schema.Schema) error {
 	if i.crdb {
@@ -1533,6 +1557,21 @@ WHERE
 	t1.table_schema = $1 AND t1.table_name IN (%s)
 ORDER BY
 	t1.table_name, t1.ordinal_position
+`
+	// Query to list installed extensions together with the schema
+	// they are relocated into and their control-file description.
+	extensionsQuery = `
+SELECT
+    e.extname AS name,
+    n.nspname AS schema,
+    e.extversion AS version,
+    COALESCE(a.comment, '') AS comment
+FROM
+    pg_extension e
+    JOIN pg_namespace n ON e.extnamespace = n.oid
+    LEFT JOIN pg_available_extensions a ON a.name = e.extname
+ORDER BY
+    e.extname
 `
 	// Query to list enum values.
 	enumsQuery = `

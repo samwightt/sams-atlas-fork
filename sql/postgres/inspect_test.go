@@ -697,6 +697,51 @@ func TestInspectMode_InspectRealm(t *testing.T) {
 	}(), realm)
 }
 
+func TestInspectExtensions(t *testing.T) {
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+	i := drv.(*Driver).Inspector.(*inspect)
+
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqltest.Rows(`
+ name      | schema      | version | comment
+-----------+-------------+---------+--------------------------------
+ adminpack | pg_catalog  | 2.1     | administrative functions for PostgreSQL
+ postgis   | public      | 3.4.1   | PostGIS spatial types
+`))
+
+	// pg_catalog is intentionally absent from the realm — it mirrors the
+	// standard schema filter in InspectRealm. adminpack's schema should
+	// stay nil; postgis should resolve to the managed public schema.
+	r := schema.NewRealm(schema.New("public"))
+	require.NoError(t, i.inspectExtensions(context.Background(), r))
+
+	require.Len(t, r.Objects, 2)
+	byName := map[string]*Extension{}
+	for _, o := range r.Objects {
+		ext, ok := o.(*Extension)
+		require.Truef(t, ok, "unexpected realm object %T", o)
+		byName[ext.Name] = ext
+	}
+
+	require.Equal(t, "2.1", byName["adminpack"].Version)
+	require.Equal(t, "administrative functions for PostgreSQL", byName["adminpack"].Comment)
+	require.Nil(t, byName["adminpack"].Schema, "extension in unmanaged schema should have nil Schema")
+
+	pub, _ := r.Schema("public")
+	require.Equal(t, "3.4.1", byName["postgis"].Version)
+	require.Equal(t, "PostGIS spatial types", byName["postgis"].Comment)
+	require.Same(t, pub, byName["postgis"].Schema)
+
+	require.NoError(t, m.ExpectationsWereMet())
+}
+
 func TestIndexOpClass_UnmarshalText(t *testing.T) {
 	var op IndexOpClass
 	require.NoError(t, op.UnmarshalText([]byte("int4_ops")))
