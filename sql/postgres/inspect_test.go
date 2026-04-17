@@ -790,6 +790,38 @@ func TestInspectRealm_Extensions(t *testing.T) {
 	require.NoError(t, m.ExpectationsWereMet())
 }
 
+func TestInspectExtensions_FiltersAutoInstalled(t *testing.T) {
+	// plpgsql is installed in every database created from template1
+	// (the default). Surfacing it would make every user's first diff
+	// try to DROP EXTENSION "plpgsql", breaking stored functions — so
+	// inspect filters it out by default.
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+	i := drv.(*Driver).Inspector.(*inspect)
+
+	mk.ExpectQuery(sqltest.Escape(extensionsQuery)).
+		WillReturnRows(sqltest.Rows(`
+ name      | schema      | version | comment
+-----------+-------------+---------+--------------------------------
+ plpgsql   | pg_catalog  | 1.0     | PL/pgSQL procedural language
+ postgis   | public      | 3.4.1   | PostGIS spatial types
+`))
+
+	r := schema.NewRealm(schema.New("public"))
+	require.NoError(t, i.inspectExtensions(context.Background(), r))
+
+	require.Len(t, r.Objects, 1, "plpgsql should be filtered out")
+	ext, ok := r.Objects[0].(*Extension)
+	require.True(t, ok)
+	require.Equal(t, "postgis", ext.Name)
+}
+
 func TestInspectRealm_NoExtensions(t *testing.T) {
 	// A DB with pg_extension returning zero rows should leave
 	// Realm.Objects empty and not error.

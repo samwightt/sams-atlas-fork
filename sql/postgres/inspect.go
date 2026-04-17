@@ -427,10 +427,19 @@ func (i *inspect) inspectEnums(ctx context.Context, r *schema.Realm) error {
 	return nil
 }
 
+// autoInstalledExtensions are extensions shipped and installed by
+// PostgreSQL's default template1, so they appear in virtually every
+// database. Surfacing them in inspect output would cause spurious
+// DROP EXTENSION diffs against HCL files that omit them.
+var autoInstalledExtensions = map[string]bool{
+	"plpgsql": true,
+}
+
 // inspectExtensions queries pg_extension and appends the installed
 // extensions onto r.Objects. An extension whose host schema is not
 // part of the managed realm (e.g. pg_catalog for system extensions)
-// is still recorded, with its Schema left nil.
+// is still recorded, with its Schema left nil. Auto-installed
+// extensions (see autoInstalledExtensions) are filtered out.
 func (i *inspect) inspectExtensions(ctx context.Context, r *schema.Realm) error {
 	rows, err := i.QueryContext(ctx, extensionsQuery)
 	if err != nil {
@@ -441,6 +450,9 @@ func (i *inspect) inspectExtensions(ctx context.Context, r *schema.Realm) error 
 		var name, ns, version, comment string
 		if err := rows.Scan(&name, &ns, &version, &comment); err != nil {
 			return fmt.Errorf("postgres: scanning extension: %w", err)
+		}
+		if autoInstalledExtensions[name] {
+			continue
 		}
 		ext := &Extension{Name: name, Version: version, Comment: comment}
 		if s, ok := r.Schema(ns); ok {
