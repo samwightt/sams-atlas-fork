@@ -505,6 +505,31 @@ func TestDiff_RealmDiff(t *testing.T) {
 	}, changes)
 }
 
+func TestDiff_RealmExtensions(t *testing.T) {
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	mock{m}.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	pub := schema.New("public")
+	postgis := &Extension{Name: "postgis", Version: "3.4.1", Schema: pub}
+	legacy := &Extension{Name: "legacy"}
+	pgTrgm := &Extension{Name: "pg_trgm", Schema: pub}
+
+	from := schema.NewRealm(pub)
+	from.Objects = []schema.Object{legacy, postgis}
+	to := schema.NewRealm(pub)
+	to.Objects = []schema.Object{postgis, pgTrgm}
+
+	changes, err := drv.RealmDiff(from, to)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []schema.Change{
+		&schema.DropObject{O: legacy},
+		&schema.AddObject{O: pgTrgm},
+	}, changes)
+}
+
 func TestDiff_SchemaDiff(t *testing.T) {
 	db, m, err := sqlmock.New()
 	require.NoError(t, err)

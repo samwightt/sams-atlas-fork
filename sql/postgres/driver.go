@@ -663,8 +663,31 @@ func (s *state) modifyObject(modify *schema.ModifyObject) error {
 
 // RealmObjectDiff returns a changeset for migrating realm (database) objects
 // from one state to the other. For example, adding extensions or users.
-func (*diff) RealmObjectDiff(_, _ *schema.Realm) ([]schema.Change, error) {
-	return nil, nil // unimplemented.
+func (*diff) RealmObjectDiff(from, to *schema.Realm) ([]schema.Change, error) {
+	var changes []schema.Change
+	fromExt, toExt := extensionsOf(from), extensionsOf(to)
+	for name, f := range fromExt {
+		if _, ok := toExt[name]; !ok {
+			changes = append(changes, &schema.DropObject{O: f})
+		}
+	}
+	for name, t := range toExt {
+		if _, ok := fromExt[name]; !ok {
+			changes = append(changes, &schema.AddObject{O: t})
+		}
+	}
+	return changes, nil
+}
+
+// extensionsOf indexes a realm's Extension objects by name.
+func extensionsOf(r *schema.Realm) map[string]*Extension {
+	m := make(map[string]*Extension)
+	for _, o := range r.Objects {
+		if e, ok := o.(*Extension); ok {
+			m[e.Name] = e
+		}
+	}
+	return m
 }
 
 // SchemaObjectDiff returns a changeset for migrating schema objects from
