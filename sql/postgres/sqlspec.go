@@ -76,9 +76,10 @@ type (
 	// extension holds a specification for a postgres extension.
 	// Note, extension names are unique within a realm (database).
 	extension struct {
-		Name string `spec:",name"`
-		// Schema, version and comment are conditionally
-		// added to the extension definition.
+		Name    string         `spec:",name"`
+		Schema  *schemahcl.Ref `spec:"schema"`
+		Version string         `spec:"version"`
+		Comment string         `spec:"comment"`
 		schemahcl.DefaultExtension
 	}
 

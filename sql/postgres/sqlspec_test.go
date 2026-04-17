@@ -1042,6 +1042,42 @@ schema "test" {
 	require.EqualValues(t, expected, string(buf))
 }
 
+func TestUnmarshalSpec_Extension(t *testing.T) {
+	var (
+		r schema.Realm
+		f = `
+schema "public" {}
+extension "postgis" {
+  schema  = schema.public
+  version = "3.4.1"
+}
+extension "adminpack" {
+  version = "2.1"
+}
+`
+	)
+	require.NoError(t, EvalHCLBytes([]byte(f), &r, nil))
+
+	pub, ok := r.Schema("public")
+	require.True(t, ok, "public schema should be present")
+
+	require.Len(t, r.Objects, 2, "both extensions should live on the realm")
+	byName := map[string]*Extension{}
+	for _, o := range r.Objects {
+		ext, ok := o.(*Extension)
+		require.Truef(t, ok, "unexpected realm object type %T", o)
+		byName[ext.Name] = ext
+	}
+
+	require.Contains(t, byName, "postgis")
+	require.Equal(t, "3.4.1", byName["postgis"].Version)
+	require.Same(t, pub, byName["postgis"].Schema)
+
+	require.Contains(t, byName, "adminpack")
+	require.Equal(t, "2.1", byName["adminpack"].Version)
+	require.Nil(t, byName["adminpack"].Schema, "adminpack omitted schema should stay nil")
+}
+
 func TestUnmarshalSpec_Identity(t *testing.T) {
 	f := `
 schema "s" {}

@@ -622,7 +622,6 @@ func (s *state) alterTableAttr(*sqlx.Builder, *schema.ModifyAttr) {
 	// unimplemented.
 }
 
-
 func (s *state) addObject(add *schema.AddObject) error {
 	switch o := add.O.(type) {
 	case *schema.EnumType:
@@ -661,7 +660,6 @@ func (s *state) modifyObject(modify *schema.ModifyObject) error {
 	}
 	return nil // unimplemented.
 }
-
 
 // RealmObjectDiff returns a changeset for migrating realm (database) objects
 // from one state to the other. For example, adding extensions or users.
@@ -735,9 +733,26 @@ func convertPolicies(_ []*sqlspec.Table, ps []*policy, _ *schema.Realm) error {
 	return nil
 }
 
-func convertExtensions(exs []*extension, _ *schema.Realm) error {
-	if len(exs) > 0 {
-		return fmt.Errorf("postgres: extensions are not supported by this version. Use: https://atlasgo.io/getting-started")
+func convertExtensions(exs []*extension, r *schema.Realm) error {
+	seen := make(map[string]bool, len(exs))
+	for _, e := range exs {
+		if seen[e.Name] {
+			return fmt.Errorf("duplicate extension %q", e.Name)
+		}
+		seen[e.Name] = true
+		ext := &Extension{Name: e.Name, Version: e.Version, Comment: e.Comment}
+		if e.Schema != nil {
+			ns, err := specutil.SchemaName(e.Schema)
+			if err != nil {
+				return fmt.Errorf("extract schema name from extension %q: %w", e.Name, err)
+			}
+			s, ok := r.Schema(ns)
+			if !ok {
+				return fmt.Errorf("schema %q defined on extension %q was not found in realm", ns, e.Name)
+			}
+			ext.Schema = s
+		}
+		r.Objects = append(r.Objects, ext)
 	}
 	return nil
 }
