@@ -667,8 +667,13 @@ func (*diff) RealmObjectDiff(from, to *schema.Realm) ([]schema.Change, error) {
 	var changes []schema.Change
 	fromExt, toExt := extensionsOf(from), extensionsOf(to)
 	for name, f := range fromExt {
-		if _, ok := toExt[name]; !ok {
+		t, ok := toExt[name]
+		if !ok {
 			changes = append(changes, &schema.DropObject{O: f})
+			continue
+		}
+		if extensionChanged(f, t) {
+			changes = append(changes, &schema.ModifyObject{From: f, To: t})
 		}
 	}
 	for name, t := range toExt {
@@ -688,6 +693,22 @@ func extensionsOf(r *schema.Realm) map[string]*Extension {
 		}
 	}
 	return m
+}
+
+// extensionChanged reports whether the desired extension meaningfully
+// differs from the current one. Unset fields on the desired side (empty
+// Version, nil Schema) mean "don't manage this axis" and never trigger a
+// diff. Comment is inspect-populated and intentionally ignored.
+func extensionChanged(from, to *Extension) bool {
+	if to.Version != "" && from.Version != to.Version {
+		return true
+	}
+	if to.Schema != nil {
+		if from.Schema == nil || from.Schema.Name != to.Schema.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // SchemaObjectDiff returns a changeset for migrating schema objects from

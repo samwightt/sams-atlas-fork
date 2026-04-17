@@ -530,6 +530,80 @@ func TestDiff_RealmExtensions(t *testing.T) {
 	}, changes)
 }
 
+func TestDiff_RealmExtensionsModify(t *testing.T) {
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	mock{m}.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	pub := schema.New("public")
+	ext := schema.New("ext")
+	diffFromTo := func(from, to *Extension) ([]schema.Change, error) {
+		f := schema.NewRealm(pub, ext)
+		f.Objects = []schema.Object{from}
+		t := schema.NewRealm(pub, ext)
+		t.Objects = []schema.Object{to}
+		return drv.RealmDiff(f, t)
+	}
+
+	t.Run("version changed", func(t *testing.T) {
+		from := &Extension{Name: "postgis", Version: "3.4.1"}
+		to := &Extension{Name: "postgis", Version: "3.4.2"}
+		changes, err := diffFromTo(from, to)
+		require.NoError(t, err)
+		require.Equal(t, []schema.Change{
+			&schema.ModifyObject{From: from, To: to},
+		}, changes)
+	})
+
+	t.Run("schema changed", func(t *testing.T) {
+		from := &Extension{Name: "postgis", Schema: pub}
+		to := &Extension{Name: "postgis", Schema: ext}
+		changes, err := diffFromTo(from, to)
+		require.NoError(t, err)
+		require.Equal(t, []schema.Change{
+			&schema.ModifyObject{From: from, To: to},
+		}, changes)
+	})
+
+	t.Run("desired version unset is no-op", func(t *testing.T) {
+		// User left version empty = "don't manage version", so the
+		// currently-installed version should not trigger a diff.
+		from := &Extension{Name: "postgis", Version: "3.4.1"}
+		to := &Extension{Name: "postgis"}
+		changes, err := diffFromTo(from, to)
+		require.NoError(t, err)
+		require.Empty(t, changes)
+	})
+
+	t.Run("desired schema unset is no-op", func(t *testing.T) {
+		// Same logic for schema — nil on desired means unmanaged placement.
+		from := &Extension{Name: "postgis", Schema: pub}
+		to := &Extension{Name: "postgis"}
+		changes, err := diffFromTo(from, to)
+		require.NoError(t, err)
+		require.Empty(t, changes)
+	})
+
+	t.Run("identical is no-op", func(t *testing.T) {
+		from := &Extension{Name: "postgis", Version: "3.4.1", Schema: pub}
+		to := &Extension{Name: "postgis", Version: "3.4.1", Schema: pub}
+		changes, err := diffFromTo(from, to)
+		require.NoError(t, err)
+		require.Empty(t, changes)
+	})
+
+	t.Run("comment differences are ignored", func(t *testing.T) {
+		// Comment is read-only / inspect-populated; it must not drive diffs.
+		from := &Extension{Name: "postgis", Comment: "old"}
+		to := &Extension{Name: "postgis", Comment: "new"}
+		changes, err := diffFromTo(from, to)
+		require.NoError(t, err)
+		require.Empty(t, changes)
+	})
+}
+
 func TestDiff_SchemaDiff(t *testing.T) {
 	db, m, err := sqlmock.New()
 	require.NoError(t, err)
