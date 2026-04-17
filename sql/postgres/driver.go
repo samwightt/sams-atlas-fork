@@ -632,6 +632,14 @@ func (s *state) addObject(add *schema.AddObject) error {
 			Reverse: drop,
 			Comment: fmt.Sprintf("create enum type %q", o.T),
 		})
+	case *Extension:
+		create, drop := s.createDropExtension(o)
+		s.append(&migrate.Change{
+			Source:  add,
+			Cmd:     create,
+			Reverse: drop,
+			Comment: fmt.Sprintf("create extension %q", o.Name),
+		})
 	default:
 		// unsupported object type.
 	}
@@ -648,6 +656,14 @@ func (s *state) dropObject(drop *schema.DropObject) error {
 			Reverse: create,
 			Comment: fmt.Sprintf("drop enum type %q", o.T),
 		})
+	case *Extension:
+		create, dropE := s.createDropExtension(o)
+		s.append(&migrate.Change{
+			Source:  drop,
+			Cmd:     dropE,
+			Reverse: create,
+			Comment: fmt.Sprintf("drop extension %q", o.Name),
+		})
 	default:
 		// unsupported object type.
 	}
@@ -658,7 +674,49 @@ func (s *state) modifyObject(modify *schema.ModifyObject) error {
 	if _, ok := modify.From.(*schema.EnumType); ok {
 		return s.alterEnum(modify)
 	}
+	if from, ok := modify.From.(*Extension); ok {
+		to := modify.To.(*Extension)
+		if to.Version != "" && from.Version != to.Version {
+			s.append(&migrate.Change{
+				Source:  modify,
+				Cmd:     s.Build("ALTER EXTENSION").Ident(to.Name).P("UPDATE TO", quote(to.Version)).String(),
+				Reverse: s.Build("ALTER EXTENSION").Ident(to.Name).P("UPDATE TO", quote(from.Version)).String(),
+				Comment: fmt.Sprintf("update extension %q version", to.Name),
+			})
+		}
+		if to.Schema != nil && (from.Schema == nil || from.Schema.Name != to.Schema.Name) {
+			cmd := s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(to.Schema.Name).String()
+			rev := ""
+			if from.Schema != nil {
+				rev = s.Build("ALTER EXTENSION").Ident(to.Name).P("SET SCHEMA").Ident(from.Schema.Name).String()
+			}
+			s.append(&migrate.Change{
+				Source:  modify,
+				Cmd:     cmd,
+				Reverse: rev,
+				Comment: fmt.Sprintf("relocate extension %q", to.Name),
+			})
+		}
+		return nil
+	}
 	return nil // unimplemented.
+}
+
+// createDropExtension builds the CREATE EXTENSION / DROP EXTENSION
+// statement pair for the given Extension. Schema and Version are only
+// emitted when explicitly set on the desired state.
+func (s *state) createDropExtension(e *Extension) (string, string) {
+	b := s.Build("CREATE EXTENSION").Ident(e.Name)
+	if e.Schema != nil || e.Version != "" {
+		b.P("WITH")
+		if e.Schema != nil {
+			b.P("SCHEMA").Ident(e.Schema.Name)
+		}
+		if e.Version != "" {
+			b.P("VERSION", quote(e.Version))
+		}
+	}
+	return b.String(), s.Build("DROP EXTENSION").Ident(e.Name).String()
 }
 
 // RealmObjectDiff returns a changeset for migrating realm (database) objects

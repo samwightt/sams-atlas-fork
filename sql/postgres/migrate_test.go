@@ -1873,6 +1873,118 @@ func TestPlanChanges(t *testing.T) {
 	}
 }
 
+func TestPlanChanges_Extensions(t *testing.T) {
+	db, mk, err := sqlmock.New()
+	require.NoError(t, err)
+	m := mock{mk}
+	m.version("130000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+
+	pub := schema.New("public")
+	ext := schema.New("ext")
+	type tc struct {
+		name    string
+		changes []schema.Change
+		want    []*migrate.Change
+	}
+	cases := []tc{
+		{
+			name: "bare create",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "adminpack"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "adminpack"`, Reverse: `DROP EXTENSION "adminpack"`},
+			},
+		},
+		{
+			name: "create with version",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "postgis", Version: "3.4.1"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "postgis" WITH VERSION '3.4.1'`, Reverse: `DROP EXTENSION "postgis"`},
+			},
+		},
+		{
+			name: "create with schema",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "postgis", Schema: pub}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "postgis" WITH SCHEMA "public"`, Reverse: `DROP EXTENSION "postgis"`},
+			},
+		},
+		{
+			name: "create with schema and version",
+			changes: []schema.Change{
+				&schema.AddObject{O: &Extension{Name: "postgis", Schema: pub, Version: "3.4.1"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `CREATE EXTENSION "postgis" WITH SCHEMA "public" VERSION '3.4.1'`, Reverse: `DROP EXTENSION "postgis"`},
+			},
+		},
+		{
+			name: "drop",
+			changes: []schema.Change{
+				&schema.DropObject{O: &Extension{Name: "postgis", Schema: pub, Version: "3.4.1"}},
+			},
+			want: []*migrate.Change{
+				{Cmd: `DROP EXTENSION "postgis"`, Reverse: `CREATE EXTENSION "postgis" WITH SCHEMA "public" VERSION '3.4.1'`},
+			},
+		},
+		{
+			name: "alter version",
+			changes: []schema.Change{
+				&schema.ModifyObject{
+					From: &Extension{Name: "postgis", Version: "3.4.1"},
+					To:   &Extension{Name: "postgis", Version: "3.4.2"},
+				},
+			},
+			want: []*migrate.Change{
+				{Cmd: `ALTER EXTENSION "postgis" UPDATE TO '3.4.2'`, Reverse: `ALTER EXTENSION "postgis" UPDATE TO '3.4.1'`},
+			},
+		},
+		{
+			name: "alter schema",
+			changes: []schema.Change{
+				&schema.ModifyObject{
+					From: &Extension{Name: "postgis", Schema: pub},
+					To:   &Extension{Name: "postgis", Schema: ext},
+				},
+			},
+			want: []*migrate.Change{
+				{Cmd: `ALTER EXTENSION "postgis" SET SCHEMA "ext"`, Reverse: `ALTER EXTENSION "postgis" SET SCHEMA "public"`},
+			},
+		},
+		{
+			name: "alter both",
+			changes: []schema.Change{
+				&schema.ModifyObject{
+					From: &Extension{Name: "postgis", Schema: pub, Version: "3.4.1"},
+					To:   &Extension{Name: "postgis", Schema: ext, Version: "3.4.2"},
+				},
+			},
+			want: []*migrate.Change{
+				{Cmd: `ALTER EXTENSION "postgis" UPDATE TO '3.4.2'`, Reverse: `ALTER EXTENSION "postgis" UPDATE TO '3.4.1'`},
+				{Cmd: `ALTER EXTENSION "postgis" SET SCHEMA "ext"`, Reverse: `ALTER EXTENSION "postgis" SET SCHEMA "public"`},
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, err := drv.PlanChanges(context.Background(), "plan", tc.changes)
+			require.NoError(t, err)
+			require.Len(t, plan.Changes, len(tc.want))
+			for i, c := range plan.Changes {
+				require.Equal(t, tc.want[i].Cmd, c.Cmd, "cmd")
+				require.Equal(t, tc.want[i].Reverse, c.Reverse, "reverse")
+			}
+		})
+	}
+}
+
 func TestDefaultPlan(t *testing.T) {
 	changes, err := DefaultPlan.PlanChanges(context.Background(), "plan", []schema.Change{
 		&schema.AddTable{T: schema.NewTable("t1").SetSchema(schema.New("s1")).AddColumns(schema.NewIntColumn("a", "int"))},
