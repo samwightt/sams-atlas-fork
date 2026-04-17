@@ -445,7 +445,7 @@ jobs:
         run: |
           docker run -d --name crdb \
             -p 26257:26257 -p 8080:8080 \
-            cockroachdb/cockroach:v24.3.0 \
+            cockroachdb/cockroach:latest-v23.2 \
             start-single-node --insecure
           for i in {1..30}; do
             curl -sf http://localhost:8080/health?ready=1 && break
