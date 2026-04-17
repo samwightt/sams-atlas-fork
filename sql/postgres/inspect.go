@@ -1017,6 +1017,19 @@ type (
 		Attrs []schema.Attr
 	}
 
+	// Extension describes a PostgreSQL extension installed at the
+	// database (realm) level. An extension block can be relocated into
+	// a target schema when the extension's control file permits it,
+	// but the extension itself exists once per database.
+	// https://www.postgresql.org/docs/current/sql-createextension.html
+	Extension struct {
+		schema.Object
+		Name    string         // Extension name, e.g. "postgis".
+		Schema  *schema.Schema // Optional schema where the extension's objects are installed.
+		Version string         // Optional version of the extension. Defaults to the extension's control-file default.
+		Comment string         // Extension description, populated on inspect from the extension's control file.
+	}
+
 	// Sequence defines (the supported) sequence options.
 	// https://postgresql.org/docs/current/sql-createsequence.html
 	Sequence struct {
