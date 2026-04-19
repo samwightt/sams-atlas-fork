@@ -24,8 +24,9 @@ jobs:
         with:
           go-version-file: cmd/atlas/go.mod
       - name: Run linters
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
+          version: v2.11.4
           args: --verbose
 
   generate-cmp:

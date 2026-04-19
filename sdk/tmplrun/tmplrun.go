@@ -2,10 +2,9 @@
 // This source code is licensed under the Apache 2.0 license found
 // in the LICENSE file in the root directory of this source tree.
 
-// package tmplrun provides a Runner for templated go programs. It is commonly used
+// Package tmplrun provides a Runner for templated go programs. It is commonly used
 // by Go Atlas providers to compile ad-hoc programs that emit the desired SQL schema for
 // data models defined for Go ORMs.
-
 package tmplrun
 
 import (

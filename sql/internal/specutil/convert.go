@@ -2,6 +2,7 @@
 // This source code is licensed under the Apache 2.0 license found
 // in the LICENSE file in the root directory of this source tree.
 
+// Package specutil provides conversion helpers between HCL spec types and schema types.
 package specutil
 
 import (
@@ -19,21 +20,33 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// List of convert function types.
 type (
-	ConvertTableFunc       func(*sqlspec.Table, *schema.Schema) (*schema.Table, error)
+	// ConvertTableFunc converts a spec table to a schema table.
+	ConvertTableFunc func(*sqlspec.Table, *schema.Schema) (*schema.Table, error)
+	// ConvertTableColumnFunc converts a spec column within a table context.
 	ConvertTableColumnFunc func(*sqlspec.Column, *schema.Table) (*schema.Column, error)
-	ConvertTypeFunc        func(*sqlspec.Column) (schema.Type, error)
-	ConvertPrimaryKeyFunc  func(*sqlspec.PrimaryKey, *schema.Table) (*schema.Index, error)
-	ConvertIndexFunc       func(*sqlspec.Index, *schema.Table) (*schema.Index, error)
-	ConvertCheckFunc       func(*sqlspec.Check) (*schema.Check, error)
-	ColumnTypeSpecFunc     func(schema.Type) (*sqlspec.Column, error)
-	TableSpecFunc          func(*schema.Table) (*sqlspec.Table, error)
-	TableColumnSpecFunc    func(*schema.Column, *schema.Table) (*sqlspec.Column, error)
-	PrimaryKeySpecFunc     func(*schema.Index) (*sqlspec.PrimaryKey, error)
-	IndexSpecFunc          func(*schema.Index) (*sqlspec.Index, error)
-	ForeignKeySpecFunc     func(*schema.ForeignKey) (*sqlspec.ForeignKey, error)
-	CheckSpecFunc          func(*schema.Check) *sqlspec.Check
+	// ConvertTypeFunc converts a spec column's type.
+	ConvertTypeFunc func(*sqlspec.Column) (schema.Type, error)
+	// ConvertPrimaryKeyFunc converts a spec primary key within a table context.
+	ConvertPrimaryKeyFunc func(*sqlspec.PrimaryKey, *schema.Table) (*schema.Index, error)
+	// ConvertIndexFunc converts a spec index within a table context.
+	ConvertIndexFunc func(*sqlspec.Index, *schema.Table) (*schema.Index, error)
+	// ConvertCheckFunc converts a spec check constraint.
+	ConvertCheckFunc func(*sqlspec.Check) (*schema.Check, error)
+	// ColumnTypeSpecFunc converts a schema type to a spec column.
+	ColumnTypeSpecFunc func(schema.Type) (*sqlspec.Column, error)
+	// TableSpecFunc converts a schema table to a spec table.
+	TableSpecFunc func(*schema.Table) (*sqlspec.Table, error)
+	// TableColumnSpecFunc converts a schema column within a table to a spec column.
+	TableColumnSpecFunc func(*schema.Column, *schema.Table) (*sqlspec.Column, error)
+	// PrimaryKeySpecFunc converts a schema primary key index to a spec primary key.
+	PrimaryKeySpecFunc func(*schema.Index) (*sqlspec.PrimaryKey, error)
+	// IndexSpecFunc converts a schema index to a spec index.
+	IndexSpecFunc func(*schema.Index) (*sqlspec.Index, error)
+	// ForeignKeySpecFunc converts a schema foreign key to a spec foreign key.
+	ForeignKeySpecFunc func(*schema.ForeignKey) (*sqlspec.ForeignKey, error)
+	// CheckSpecFunc converts a schema check constraint to a spec check.
+	CheckSpecFunc func(*schema.Check) *sqlspec.Check
 )
 
 type (

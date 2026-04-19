@@ -764,6 +764,7 @@ var (
 	// ErrLint is returned when the 'migrate lint' finds a diagnostic that is configured to
 	// be reported as an error, such as destructive changes by default.
 	ErrLint = errors.New("lint error")
+	// LintErr is a deprecated alias for ErrLint.
 	// Deprecated: Use ErrLint instead.
 	LintErr = ErrLint
 )

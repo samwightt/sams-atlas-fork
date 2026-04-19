@@ -273,7 +273,7 @@ func (s *state) dropIndexes(t *schema.Table, indexes ...*schema.Index) error {
 		s.append(&migrate.Change{
 			Cmd:     rs.Changes[i].Reverse.(string),
 			Reverse: rs.Changes[i].Cmd,
-			Comment: fmt.Sprintf("drop index %q from table: %q", indexes[i].Name, t.Name),
+			Comment: fmt.Sprintf("drop index %q from table: %q", indexes[i].Name, t.Name), //nolint:gosec // invariant: addIndexes appends exactly one Change per input index
 		})
 	}
 	return nil

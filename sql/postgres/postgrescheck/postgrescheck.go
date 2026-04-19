@@ -2,6 +2,7 @@
 // This source code is licensed under the Apache 2.0 license found
 // in the LICENSE file in the root directory of this source tree.
 
+// Package postgrescheck provides sqlcheck analyzers for PostgreSQL-specific schema changes.
 package postgrescheck
 
 import (
