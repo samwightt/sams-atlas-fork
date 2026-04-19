@@ -283,6 +283,9 @@ func (i *inspect) addColumn(s *schema.Schema, rows *sql.Rows) (err error) {
 		precision:     precision.Int64,
 		timePrecision: &timeprecision.Int64,
 	})
+	if err != nil {
+		return err
+	}
 	switch tt := c.Type.Type.(type) {
 	case *ArrayType:
 		if u, ok := tt.Underlying().(*UserDefinedType); ok {

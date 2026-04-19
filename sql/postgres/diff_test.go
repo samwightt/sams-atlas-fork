@@ -489,6 +489,7 @@ func TestDiff_RealmDiff(t *testing.T) {
 	require.NoError(t, err)
 	mock{m}.version("130000")
 	drv, err := Open(db)
+	require.NoError(t, err)
 	to := schema.New("public").
 		AddTables(
 			schema.NewTable("users").AddColumns(schema.NewIntColumn("t2_id", "int")),

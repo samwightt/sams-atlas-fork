@@ -221,6 +221,7 @@ func TestPlanner_CheckpointSchema(t *testing.T) {
 	drv.realm = *schema.NewRealm(schema.New("test"))
 	pl = migrate.NewPlanner(drv, d)
 	plan, err = pl.CheckpointSchema(ctx, "empty")
+	require.NoError(t, err)
 	require.Equal(t, &migrate.Plan{Name: "empty"}, plan)
 }
 
@@ -255,13 +256,13 @@ func TestExecutor_ExecOrderLinear(t *testing.T) {
 
 		ex, err = migrate.NewExecutor(drv, dir("1.sql", "2.sql", "2.5.sql", "3.sql"), rrw)
 		require.NoError(t, err)
-		files, err = ex.Pending(ctx)
+		_, err = ex.Pending(ctx)
 		require.ErrorAs(t, err, new(*migrate.HistoryNonLinearError))
 		require.EqualError(t, err, "migration file 2.5.sql was added out of order. See: https://atlasgo.io/versioned/apply#non-linear-error")
 
 		ex, err = migrate.NewExecutor(drv, dir("1.sql", "2.sql", "2.5.sql", "2.6.sql", "3.sql"), rrw)
 		require.NoError(t, err)
-		files, err = ex.Pending(ctx)
+		_, err = ex.Pending(ctx)
 		require.ErrorAs(t, err, new(*migrate.HistoryNonLinearError))
 		require.EqualError(t, err, "migration files 2.5.sql, 2.6.sql were added out of order. See: https://atlasgo.io/versioned/apply#non-linear-error")
 
@@ -277,7 +278,7 @@ func TestExecutor_ExecOrderLinear(t *testing.T) {
 		rrw = &mockRevisionReadWriter{{Version: "2"}, {Version: "3"}}
 		ex, err = migrate.NewExecutor(drv, dir("1.sql", "2_checkpoint.sql", "2.5.sql", "3.sql"), rrw)
 		require.NoError(t, err)
-		files, err = ex.Pending(ctx)
+		_, err = ex.Pending(ctx)
 		require.ErrorAs(t, err, new(*migrate.HistoryNonLinearError))
 		require.EqualError(t, err, "migration file 2.5.sql was added out of order. See: https://atlasgo.io/versioned/apply#non-linear-error")
 	})
@@ -608,7 +609,7 @@ func TestExecutor_Baseline(t *testing.T) {
 	rrw = mockRevisionReadWriter{}
 	ex, err = migrate.NewExecutor(drv, dir, &rrw, migrate.WithLogger(log), migrate.WithBaselineVersion("3"))
 	require.NoError(t, err)
-	files, err = ex.Pending(context.Background())
+	_, err = ex.Pending(context.Background())
 	require.ErrorIs(t, err, migrate.ErrNoPendingFiles)
 	require.Len(t, rrw, 1)
 	require.Equal(t, "3", rrw[0].Version)

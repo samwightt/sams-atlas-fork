@@ -5,6 +5,7 @@ linters:
     - goheader
     - gosec
     - govet
+    - ineffassign
     - revive
   settings:
     goheader:

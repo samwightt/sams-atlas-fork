@@ -160,6 +160,7 @@ func TestHash_MarshalText(t *testing.T) {
 	h, err := d.Checksum()
 	require.NoError(t, err)
 	ac, err := h.MarshalText()
+	require.NoError(t, err)
 	require.Equal(t, hash, ac)
 }
 
@@ -503,7 +504,7 @@ func TestDirTar(t *testing.T) {
 	// Test with Golang migrate dir.
 	dir1, err := sqltool.NewGolangMigrateDir("./testdata/golang-migrate")
 	require.NoError(t, err)
-	b, err = migrate.ArchiveDir(dir1)
+	_, err = migrate.ArchiveDir(dir1)
 	require.NoError(t, err)
 
 	// With sumfile.
@@ -538,6 +539,7 @@ func TestDirTar(t *testing.T) {
 	dir, err = migrate.UnarchiveDirFrom(rr)
 	require.NoError(t, err)
 	files, err = dir.Files()
+	require.NoError(t, err)
 	require.Len(t, files, 1)
 	require.Equal(t, "1.sql", files[0].Name())
 	require.Equal(t, "create table t(c int);", string(files[0].Bytes()))

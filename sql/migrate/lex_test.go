@@ -87,7 +87,7 @@ func TestScanner_EscapedStrings(t *testing.T) {
 
 	scan.BackslashEscapes = false
 	scan.EscapedStringExt = true
-	stmts, err = scan.Scan(string(files[0].Bytes()))
+	_, err = scan.Scan(string(files[0].Bytes()))
 	require.EqualError(t, err, `4:42: unclosed quote '\''`, "disabled escaped strings should fail parse of escaped strings without the extension")
 	stmts, err = scan.Scan(string(files[1].Bytes()))
 	require.NoError(t, err)

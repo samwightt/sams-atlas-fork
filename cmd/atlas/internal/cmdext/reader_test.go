@@ -109,6 +109,7 @@ table "t1" {
 
 	// Read schema file.
 	u, err := url.Parse("file://" + p + "/schema.hcl")
+	require.NoError(t, err)
 	sr, err := StateReaderHCL(ctx, &StateReaderConfig{
 		Dev:  dev,
 		URLs: []*url.URL{u},

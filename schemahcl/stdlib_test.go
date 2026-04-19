@@ -173,7 +173,7 @@ func TestEmptyFunc(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, cty.False, got)
 	// Invalid value.
-	got, err = emptyFunc.Call([]cty.Value{cty.StringVal("a")})
+	_, err = emptyFunc.Call([]cty.Value{cty.StringVal("a")})
 	require.EqualError(t, err, "collection must be a list, a map or a tuple")
 }
 
