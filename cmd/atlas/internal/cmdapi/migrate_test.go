@@ -680,7 +680,7 @@ func TestMigrate_ApplyTxModeDirective(t *testing.T) {
 			"--url", u,
 			"--tx-mode", mode,
 		)
-		require.EqualError(t, err, `sql/migrate: executing statement "INSERT INTO t1 VALUES (1), (1);" from version "20220925094021": UNIQUE constraint failed: t1.a`)
+		require.EqualError(t, err, `sql/migrate: executing statement "INSERT INTO t1 VALUES (1), (1);" from version "20220925094021": constraint failed: UNIQUE constraint failed: t1.a (1555)`)
 		db, err := sql.Open("sqlite3", strings.TrimPrefix(u, "sqlite://"))
 		require.NoError(t, err)
 		var n int
