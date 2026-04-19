@@ -21,7 +21,7 @@ import (
 	"ariga.io/atlas/sql/migrate"
 	"ariga.io/atlas/sql/sqlclient"
 	_ "ariga.io/atlas/sql/sqlite"
-	_ "github.com/mattn/go-sqlite3"
+	_ "ariga.io/atlas/sql/sqlite/sqlitedriver"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 )
