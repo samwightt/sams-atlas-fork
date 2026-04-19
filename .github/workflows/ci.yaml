@@ -187,7 +187,7 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for HCL
         working-directory: internal/integration/hclsqlspec
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -coverprofile=coverage.txt ./...
+        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -coverpkg=ariga.io/atlas/... -coverprofile=coverage.txt ./...
       - name: Upload integration coverage
         uses: codecov/codecov-action@v5
         with:
