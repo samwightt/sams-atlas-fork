@@ -31,14 +31,14 @@ func TestMySQL_Executor(t *testing.T) {
 }
 ```
 
-If you'd wanted to run that test only for mysql56, simply pass its full name into the `-run` flag:
+If you'd wanted to run that test only for mysql57, simply pass its full name into the `-run` flag:
 
 ```shell
 # Run TestMySQL_Executor for all mysql versions
 go test -run='MySQL_Executor' ./... 
 
-# Run TestMySQL_Executor for mysql 5.6 only
-go test -run='MySQL_Executor/mysql56' ./...
+# Run TestMySQL_Executor for mysql 5.7 only
+go test -run='MySQL_Executor/mysql57' ./...
 ```
 
 If you'd like to run the above for Postgres 10, change the name respectively:

@@ -22,11 +22,11 @@ locals {
 }
 
 env "local" {
-    url = "mysql://a8m:${local.escaped_pass}@localhost:3308/script_cli_project_url_escape"
+    url = "mysql://a8m:${local.escaped_pass}@localhost:PORT/script_cli_project_url_escape"
 }
 
 env "failed" {
-    url = "mysql://a8m:${var.pass}@localhost:3308/script_cli_project_url_escape"
+    url = "mysql://a8m:${var.pass}@localhost:PORT/script_cli_project_url_escape"
 }
 
 -- want.txt --

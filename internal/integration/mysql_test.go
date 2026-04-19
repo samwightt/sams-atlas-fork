@@ -33,9 +33,9 @@ type myTest struct {
 }
 
 var myTests = map[string]*myTest{
-	"mysql56":  {port: 3306},
 	"mysql57":  {port: 3307},
 	"mysql8":   {port: 3308},
+	"mysql84":  {port: 3309},
 	"maria107": {port: 4306},
 	"maria102": {port: 4307},
 	"maria103": {port: 4308},
@@ -372,7 +372,7 @@ func TestMySQL_ColumnBool(t *testing.T) {
 func TestMySQL_ColumnCheck(t *testing.T) {
 	myRun(t, func(t *myTest) {
 		// Checks are not supported in all versions.
-		if t.version == "mysql56" || t.version == "mysql57" {
+		if t.version == "mysql57" {
 			t.Skip()
 		}
 		usersT := &schema.Table{
@@ -1083,7 +1083,7 @@ create table atlas_types_sanity
 								T: "year",
 								Precision: func() *int {
 									// From MySQL 8.0.19, display width is deprecated in YEAR types.
-									if t.version == "mysql8" {
+									if t.version == "mysql8" || t.version == "mysql84" {
 										return nil
 									}
 									p := 4
@@ -1255,9 +1255,6 @@ create table atlas_types_sanity
 ) CHARSET = latin1 COLLATE latin1_swedish_ci;
 `
 		myRun(t, func(t *myTest) {
-			if t.version == "mysql56" {
-				return
-			}
 			t.dropTables(n)
 			_, err := t.db.Exec(ddl)
 			require.NoError(t, err)
@@ -1455,6 +1452,11 @@ func (t *myTest) valueByVersion(values map[string]string, defaults string) strin
 	if v, ok := values[t.version]; ok {
 		return v
 	}
+	if f := t.versionFamily(); f != "" {
+		if v, ok := values[f]; ok {
+			return v
+		}
+	}
 	return defaults
 }
 
@@ -1462,7 +1464,22 @@ func (t *myTest) intByVersion(values map[string]int, defaults int) int {
 	if v, ok := values[t.version]; ok {
 		return v
 	}
+	if f := t.versionFamily(); f != "" {
+		if v, ok := values[f]; ok {
+			return v
+		}
+	}
 	return defaults
+}
+
+// versionFamily lets point-releases inherit entries keyed by a "family" version.
+// Example: mysql84 falls back to mysql8-keyed entries when no mysql84 entry exists.
+func (t *myTest) versionFamily() string {
+	switch t.version {
+	case "mysql84":
+		return "mysql8"
+	}
+	return ""
 }
 
 func (t *myTest) quoted(s string) string {
@@ -1512,7 +1529,7 @@ func (t *myTest) defaultAttrs() []schema.Attr {
 	case strings.Contains(t.version, "tidb"):
 		charset = "utf8mb4"
 		collation = "utf8mb4_bin"
-	case t.version == "mysql8":
+	case t.version == "mysql8", t.version == "mysql84":
 		charset = "utf8mb4"
 		collation = "utf8mb4_0900_ai_ci"
 	case t.version == "maria107":
