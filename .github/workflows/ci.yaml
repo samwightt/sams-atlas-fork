@@ -62,12 +62,42 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
       - name: Run sql tests
-        run: go test -race ./...
         working-directory: sql
+        run: |
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -coverprofile=coverage.txt \
+            $(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
       - name: Run schemahcl tests
-        run: go test -race ./...
         working-directory: schemahcl
+        run: |
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -coverprofile=coverage.txt \
+            $(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+      - name: Upload sql coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: sql/coverage.txt
+          flags: sql
+      - name: Upload schemahcl coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: schemahcl/coverage.txt
+          flags: schemahcl
+      - name: Upload sql test results
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: sql/junit.xml
+      - name: Upload schemahcl test results
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: schemahcl/junit.xml
 
   cli:
     runs-on: ubuntu-latest
@@ -76,9 +106,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cmd/atlas/go.mod
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
       - name: Run cli tests
-        run: go test -race ./...
+        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -coverprofile=coverage.txt ./...
         working-directory: cmd/atlas
+      - name: Upload cli coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: cmd/atlas/coverage.txt
+          flags: cli
+      - name: Upload cli test results
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: cmd/atlas/junit.xml
 
   integration:
     runs-on: ubuntu-latest
@@ -87,9 +131,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cmd/atlas/go.mod
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for HCL
         working-directory: internal/integration/hclsqlspec
-        run: go test -race -count=2 -v ./...
+        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -coverprofile=coverage.txt ./...
+      - name: Upload integration coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/hclsqlspec/coverage.txt
+          flags: integration
+      - name: Upload integration test results
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/hclsqlspec/junit.xml
 
   dialect-integration:
     needs: [lint, generate-cmp, unit, integration]
