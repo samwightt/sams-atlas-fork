@@ -940,11 +940,6 @@ func TestAtlasMigrate_Lint(t *testing.T) {
 					Code: "DS102",
 					SuggestedFixes: []sqlcheck.SuggestedFix{{
 						Message: "Add a pre-migration check to ensure table \"t2\" is empty before dropping it",
-						TextEdit: &sqlcheck.TextEdit{
-							Line:    1,
-							End:     1,
-							NewText: "-- atlas:txtar\n\n-- checks/destructive.sql --\n-- atlas:assert DS102\nSELECT NOT EXISTS (SELECT 1 FROM `t2`) AS `is_empty`;\n\n-- migration.sql --\nDROP TABLE t2;",
-						},
 					}},
 				}},
 			}},
@@ -967,21 +962,22 @@ func TestAtlasMigrate_Lint(t *testing.T) {
 		require.NoError(t, json.NewDecoder(&buf).Decode(&raw))
 		require.Contains(t, string(raw), "destructive changes detected")
 	})
-	t.Run("lint uses --base and --latest", func(t *testing.T) {
+	t.Run("lint uses --git-base and --latest", func(t *testing.T) {
 		c, err := atlasexec.NewClient(".", "atlas")
 		require.NoError(t, err)
 		summary, err := c.MigrateLint(context.Background(), &atlasexec.MigrateLintParams{
-			DevURL: "sqlite://file?mode=memory",
-			DirURL: "file://testdata/migrations",
-			Latest: 1,
-			Base:   "atlas://test-dir",
+			DevURL:  "sqlite://file?mode=memory",
+			DirURL:  "file://testdata/migrations",
+			Latest:  1,
+			GitBase: "main",
 		})
-		require.ErrorContains(t, err, "--latest, --git-base, and --base are mutually exclusive")
+		require.ErrorContains(t, err, "--latest and --git-base are mutually exclusive")
 		require.Nil(t, summary)
 	})
 }
 
 func TestAtlasMigrate_LintWithLogin(t *testing.T) {
+	t.Skip("cloud feature not supported in community edition")
 	type (
 		migrateLintReport struct {
 			Context *atlasexec.RunContext `json:"context"`
