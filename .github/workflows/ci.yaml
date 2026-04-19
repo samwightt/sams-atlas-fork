@@ -65,11 +65,15 @@ jobs:
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
       - name: Run sql tests
+        id: sql_tests
+        continue-on-error: true
         working-directory: sql
         run: |
           gotestsum --junitfile junit.xml --raw-command -- go test -json -race -coverprofile=coverage.txt \
             $(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
       - name: Run schemahcl tests
+        id: schemahcl_tests
+        continue-on-error: true
         working-directory: schemahcl
         run: |
           gotestsum --junitfile junit.xml --raw-command -- go test -json -race -coverprofile=coverage.txt \
@@ -100,6 +104,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: schemahcl/junit.xml
           report_type: test_results
+      - name: Fail if any unit suite failed
+        if: ${{ always() }}
+        run: |
+          if [ "${{ steps.sql_tests.outcome }}" = "failure" ] || [ "${{ steps.schemahcl_tests.outcome }}" = "failure" ]; then
+            exit 1
+          fi
 
   cli:
     runs-on: ubuntu-latest
