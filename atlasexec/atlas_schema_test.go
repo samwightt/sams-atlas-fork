@@ -871,6 +871,7 @@ func TestSchemaApplyError_Error(t *testing.T) {
 }
 
 func TestAtlasSchema_Lint(t *testing.T) {
+	t.Skip("cloud feature not supported in community edition")
 	t.Run("with broken config", func(t *testing.T) {
 		c, err := atlasexec.NewClient(".", "atlas")
 		require.NoError(t, err)
