@@ -51,7 +51,7 @@ type (
 	// GitChangeDetector implements the ChangeDetector interface by utilizing a git repository.
 	GitChangeDetector struct {
 		work string      // path to the git working directory (i.e. -C)
-		base string      // name of the base branch (e.g. master)
+		base string      // name of the base branch (e.g. main)
 		path string      // path of the migration directory relative to the repository root (in slash notation)
 		dir  migrate.Dir // the migration directory to load migration files from
 	}
@@ -72,7 +72,7 @@ func NewGitChangeDetector(dir migrate.Dir, opts ...GitChangeDetectorOption) (*Gi
 		}
 	}
 	if d.base == "" {
-		d.base = "master"
+		d.base = "main"
 	}
 	if d.path == "" {
 		d.path = "migrations"

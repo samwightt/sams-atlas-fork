@@ -16,7 +16,7 @@ import (
 
 	"ariga.io/atlas/atlasexec"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "ariga.io/atlas/sql/sqlite/sqlitedriver"
 	"github.com/stretchr/testify/require"
 )
 

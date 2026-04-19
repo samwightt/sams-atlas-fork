@@ -16,8 +16,8 @@ import (
 	"ariga.io/atlas/cmd/atlas/internal/migratelint"
 	"ariga.io/atlas/sql/migrate"
 	_ "ariga.io/atlas/sql/sqlite"
+	_ "ariga.io/atlas/sql/sqlite/sqlitedriver"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func TestGitChangeDetector(t *testing.T) {
 		out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
-	git("init")
+	git("init", "-b", "main")
 	// Config a fake Git user for the working directory.
 	git("config", "user.name", "a8m")
 	git("config", "user.email", "a8m@atlasgo.io")

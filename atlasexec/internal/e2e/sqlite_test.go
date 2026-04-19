@@ -16,7 +16,7 @@ import (
 	"ariga.io/atlas/atlasexec"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "ariga.io/atlas/sql/sqlite/sqlitedriver"
 )
 
 func Test_SQLite(t *testing.T) {

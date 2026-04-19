@@ -31,7 +31,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
+	_ "ariga.io/atlas/sql/sqlite/sqlitedriver"
 	"github.com/stretchr/testify/require"
 )
 
@@ -680,7 +680,7 @@ func TestMigrate_ApplyTxModeDirective(t *testing.T) {
 			"--url", u,
 			"--tx-mode", mode,
 		)
-		require.EqualError(t, err, `sql/migrate: executing statement "INSERT INTO t1 VALUES (1), (1);" from version "20220925094021": UNIQUE constraint failed: t1.a`)
+		require.EqualError(t, err, `sql/migrate: executing statement "INSERT INTO t1 VALUES (1), (1);" from version "20220925094021": constraint failed: UNIQUE constraint failed: t1.a (1555)`)
 		db, err := sql.Open("sqlite3", strings.TrimPrefix(u, "sqlite://"))
 		require.NoError(t, err)
 		var n int
@@ -1665,7 +1665,7 @@ lint {
 	require.Error(t, err)
 	require.Regexp(t, `Analyzing changes from version 1.up to 2.up \(1 migration in total\):
 
-  Error: executing statement: BORING: near "BORING": syntax error
+  Error: executing statement: BORING: SQL logic error: near "BORING": syntax error \(1\)
 
   -------------------------
   -- .+

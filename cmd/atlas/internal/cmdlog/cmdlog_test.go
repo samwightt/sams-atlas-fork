@@ -24,8 +24,9 @@ import (
 	"ariga.io/atlas/sql/sqlclient"
 	_ "ariga.io/atlas/sql/sqlite"
 
+	_ "ariga.io/atlas/sql/sqlite/sqlitedriver"
+
 	"github.com/fatih/color"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -720,7 +721,7 @@ func TestReporter_Status(t *testing.T) {
 
 Last migration attempt had errors:
   -- SQL:   THIS LINE ADDS A SYNTAX ERROR;
-  -- ERROR: near "THIS": syntax error
+  -- ERROR: SQL logic error: near "THIS": syntax error (1)
 `, buf.String())
 
 	// Fixed three - okay.
