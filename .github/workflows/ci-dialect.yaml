@@ -553,6 +553,36 @@ jobs:
         working-directory: internal/integration
         run: go test -race -count=2 -v -run="TiDB" -version="tidb6" -timeout 15m ./...
 
+  ci-passed:
+    runs-on: ubuntu-latest
+    needs:
+      - integration-mysql57
+      - integration-mysql8
+      - integration-mysql84
+      - integration-maria107
+      - integration-maria102
+      - integration-maria103
+      - integration-postgres-ext-postgis
+      - integration-postgres12
+      - integration-postgres13
+      - integration-postgres14
+      - integration-postgres15
+      - integration-postgres16
+      - integration-postgres17
+      - integration-postgres18
+      - integration-sqlite
+      - integration-tidb5
+      - integration-tidb6
+    if: always()
+    steps:
+      - name: Check all integration jobs passed
+        run: |
+          results='${{ toJSON(needs) }}'
+          if echo "$results" | grep -q '"result": "failure"'; then
+            echo "One or more integration jobs failed"
+            exit 1
+          fi
+
   # Disabled: tests drift between cockroach v21 (what they were written for)
   # and currently-supported versions (v23.2+). Revisit by fixing tests or
   # dropping cockroach support entirely.
