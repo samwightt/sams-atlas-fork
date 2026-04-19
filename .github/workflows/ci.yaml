@@ -156,3 +156,5 @@ jobs:
   dialect-integration:
     needs: [lint, generate-cmp, unit, integration]
     uses: ./.github/workflows/ci-dialect.yaml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
