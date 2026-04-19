@@ -7,6 +7,7 @@ concurrency:
 env:
   ATLAS_NO_UPGRADE_SUGGESTIONS: 1
   ATLAS_TEST_BINARY: /tmp/atlas
+  GOCOVERDIR: /tmp/gocover
 jobs:
   build-atlas:
     runs-on: ubuntu-latest
@@ -15,9 +16,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cmd/atlas/go.mod
-      - name: Build atlas CLI
+      - name: Build atlas CLI with coverage instrumentation
         working-directory: cmd/atlas
-        run: go build -o atlas .
+        run: go build -cover -coverpkg=ariga.io/atlas/... -o atlas .
       - uses: actions/upload-artifact@v4
         with:
           name: atlas
@@ -55,16 +56,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for mysql57
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="mysql57" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="mysql57" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-mysql57
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-mysql8:
     runs-on: ubuntu-latest
@@ -97,16 +112,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for mysql8
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="mysql8" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="mysql8" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-mysql8
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-mysql84:
     runs-on: ubuntu-latest
@@ -139,16 +168,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for mysql84
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="mysql84" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="mysql84" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-mysql84
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-maria107:
     runs-on: ubuntu-latest
@@ -181,16 +224,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for maria107
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="maria107" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="maria107" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-maria107
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-maria102:
     runs-on: ubuntu-latest
@@ -223,16 +280,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for maria102
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="maria102" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="maria102" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-maria102
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-maria103:
     runs-on: ubuntu-latest
@@ -265,16 +336,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for maria103
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="maria103" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="MySQL" -version="maria103" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-maria103
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres-ext-postgis:
     runs-on: ubuntu-latest
@@ -306,16 +391,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres-ext-postgis
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres-ext-postgis" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres-ext-postgis" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres-ext-postgis
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres12:
     runs-on: ubuntu-latest
@@ -347,16 +446,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres12
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres12" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres12" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres12
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres13:
     runs-on: ubuntu-latest
@@ -388,16 +501,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres13
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres13" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres13" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres13
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres14:
     runs-on: ubuntu-latest
@@ -429,16 +556,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres14
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres14" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres14" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres14
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres15:
     runs-on: ubuntu-latest
@@ -470,16 +611,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres15
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres15" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres15" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres15
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres16:
     runs-on: ubuntu-latest
@@ -511,16 +666,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres16
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres16" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres16" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres16
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres17:
     runs-on: ubuntu-latest
@@ -552,16 +721,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres17
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres17" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres17" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres17
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-postgres18:
     runs-on: ubuntu-latest
@@ -593,16 +776,30 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for postgres18
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres18" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="Postgres" -version="postgres18" -timeout 15m ./...
         env:
           POSTGRES_DB: test
           POSTGRES_PASSWORD: pass
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-postgres18
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-sqlite:
     runs-on: ubuntu-latest
@@ -621,13 +818,27 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for sqlite
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="SQLite.*" -version="sqlite" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="SQLite.*" -version="sqlite" -timeout 15m ./...
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-sqlite
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-tidb5:
     runs-on: ubuntu-latest
@@ -651,13 +862,27 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for tidb5
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="TiDB" -version="tidb5" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="TiDB" -version="tidb5" -timeout 15m ./...
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-tidb5
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   integration-tidb6:
     runs-on: ubuntu-latest
@@ -681,13 +906,27 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
       - name: Run integration tests for tidb6
         working-directory: internal/integration
-        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="TiDB" -version="tidb6" -timeout 15m ./...
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          gotestsum --junitfile junit.xml --raw-command -- go test -json -race -count=2 -v -run="TiDB" -version="tidb6" -timeout 15m ./...
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        working-directory: internal/integration
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=coverage.txt
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: internal/integration/coverage.txt
+          flags: integration-tidb6
       - name: Upload test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/junit.xml
+          report_type: test_results
 
   ci-passed:
     runs-on: ubuntu-latest

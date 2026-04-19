@@ -88,16 +88,18 @@ jobs:
           flags: schemahcl
       - name: Upload sql test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: sql/junit.xml
+          report_type: test_results
       - name: Upload schemahcl test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: schemahcl/junit.xml
+          report_type: test_results
 
   cli:
     runs-on: ubuntu-latest
@@ -119,10 +121,11 @@ jobs:
           flags: cli
       - name: Upload cli test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: cmd/atlas/junit.xml
+          report_type: test_results
 
   integration:
     runs-on: ubuntu-latest
@@ -144,10 +147,11 @@ jobs:
           flags: integration
       - name: Upload integration test results
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: internal/integration/hclsqlspec/junit.xml
+          report_type: test_results
 
   dialect-integration:
     needs: [lint, generate-cmp, unit, integration]
