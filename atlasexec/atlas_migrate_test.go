@@ -479,18 +479,18 @@ func TestAtlasMigrate_ApplyBroken(t *testing.T) {
 		URL:    "sqlite://?mode=memory",
 		DirURL: "file://testdata/broken",
 	})
-	require.ErrorContains(t, err, `sql/migrate: executing statement "broken;" from version "20231029112426": near "broken": syntax error`)
+	require.ErrorContains(t, err, `sql/migrate: executing statement "broken;" from version "20231029112426": SQL logic error: near "broken": syntax error (1)`)
 	require.Nil(t, got)
 	report, ok := err.(*atlasexec.MigrateApplyError)
 	require.True(t, ok)
 	require.Equal(t, "20231029112426", report.Result[0].Target)
-	require.Equal(t, "sql/migrate: executing statement \"broken;\" from version \"20231029112426\": near \"broken\": syntax error", report.Error())
+	require.Equal(t, "sql/migrate: executing statement \"broken;\" from version \"20231029112426\": SQL logic error: near \"broken\": syntax error (1)", report.Error())
 	require.Len(t, report.Result[0].Applied, 1)
 	require.Equal(t, &struct {
 		Stmt, Text string
 	}{
 		Stmt: "broken;",
-		Text: "near \"broken\": syntax error",
+		Text: "SQL logic error: near \"broken\": syntax error (1)",
 	}, report.Result[0].Applied[0].Error)
 }
 
