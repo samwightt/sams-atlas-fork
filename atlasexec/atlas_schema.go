@@ -614,7 +614,7 @@ func (c *Client) SchemaPlanPush(ctx context.Context, params *SchemaPlanPushParam
 	return stringVal(c.runCommand(ctx, args))
 }
 
-// SchemaPlanPush runs the `schema plan pull` command.
+// SchemaPlanPull runs the `schema plan pull` command.
 func (c *Client) SchemaPlanPull(ctx context.Context, params *SchemaPlanPullParams) (string, error) {
 	args := []string{"schema", "plan", "pull"}
 	// Global flags

@@ -96,7 +96,7 @@ func (ce *WorkingDir) DirFS() fs.FS {
 	return os.DirFS(ce.dir)
 }
 
-// Dir returns the path to the temporary directory.
+// Path returns the path to the temporary directory, optionally joined with elem.
 func (ce *WorkingDir) Path(elem ...string) string {
 	if len(elem) == 0 {
 		return ce.dir

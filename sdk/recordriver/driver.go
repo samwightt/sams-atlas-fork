@@ -2,10 +2,9 @@
 // This source code is licensed under the Apache 2.0 license found
 // in the LICENSE file in the root directory of this source tree.
 
-// package recordriver provides a driver for database/sql which records queries and statements
-// and allows you to set responses for queries. It is used for testing or providing a runtime replacement
-// for a real database in cases where you want to learn the queries and statements that are executed.
-
+// Package recordriver provides a database/sql driver that records queries and statements
+// and allows you to set responses for queries. It is used for testing or providing a runtime
+// replacement for a real database in cases where you want to learn the queries that are executed.
 package recordriver
 
 import (
