@@ -597,17 +597,49 @@ var funcs = template.FuncMap{
 	"rev": reverse,
 }
 
-// templateFormatter parses the given templates and passes them on to the migrate.NewTemplateFormatter.
+// templateFormatter parses the given templates and returns a Formatter that
+// shares a single "now" timestamp across every template it renders for a given
+// Plan. Without this, formatters like GolangMigrate that emit both up and down
+// files call {{ now }} twice and can straddle a second boundary — producing
+// filenames with different timestamps that no longer sort as the pair expects.
 func templateFormatter(templates ...string) migrate.Formatter {
+	// Validate once at construction so callers still get a panic on bad input.
 	tpls := make([]*template.Template, len(templates))
 	for i, t := range templates {
 		tpls[i] = template.Must(template.New("").Funcs(funcs).Parse(t))
 	}
-	tf, err := migrate.NewTemplateFormatter(tpls...)
-	if err != nil {
+	if _, err := migrate.NewTemplateFormatter(tpls...); err != nil {
 		panic(err)
 	}
-	return tf
+	return &sharedNowFormatter{templates: templates}
+}
+
+// sharedNowFormatter re-parses its templates for each Format call with a "now"
+// bound to a single time.Now() captured at the start of the call.
+type sharedNowFormatter struct {
+	templates []string
+}
+
+func (f *sharedNowFormatter) Format(plan *migrate.Plan) ([]migrate.File, error) {
+	now := time.Now().UTC().Format("20060102150405")
+	local := template.FuncMap{
+		"inc": funcs["inc"],
+		"now": func() string { return now },
+		"rev": funcs["rev"],
+	}
+	tpls := make([]*template.Template, len(f.templates))
+	for i, t := range f.templates {
+		parsed, err := template.New("").Funcs(local).Parse(t)
+		if err != nil {
+			return nil, err
+		}
+		tpls[i] = parsed
+	}
+	tf, err := migrate.NewTemplateFormatter(tpls...)
+	if err != nil {
+		return nil, err
+	}
+	return tf.Format(plan)
 }
 
 // reverse changes for the down migration.
