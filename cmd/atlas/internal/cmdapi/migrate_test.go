@@ -214,6 +214,7 @@ func TestMigrate_Apply(t *testing.T) {
 		require.NoError(t, c.Close())
 	})
 	sch, err := c.InspectSchema(ctx, "", nil)
+	require.NoError(t, err)
 	tbl, ok := sch.Table("tbl")
 	require.True(t, ok)
 	_, ok = tbl.Column("col_2")
@@ -243,13 +244,15 @@ func TestMigrate_Apply(t *testing.T) {
 	require.Contains(t, s, "-- 1 sql statement ok, 1 with errors")      // logs amount of statement
 	require.Contains(t, s, "near \"asdasd\": syntax error")             // logs error summary
 
-	// Editing an applied line will raise error.
-	s, err = runCmd(
+	// Re-apply with --tx-mode=none so col_2 persists for the HistoryChangedError
+	// case below; the syntax error in the second statement still fails this apply.
+	_, err = runCmd(
 		migrateApplyCmd(),
 		"--dir", "file://testdata/sqlite2",
 		"--url", fmt.Sprintf("sqlite://file:%s?cache=shared&_fk=1", filepath.Join(p, "test2.db")),
 		"--tx-mode", "none",
 	)
+	require.Error(t, err)
 	t.Cleanup(func() {
 		_ = os.RemoveAll("testdata/sqlite3")
 	})
@@ -257,7 +260,7 @@ func TestMigrate_Apply(t *testing.T) {
 	sed(t, "s/col_2/col_5/g", "testdata/sqlite3/20220318104615_second.sql")
 	_, err = runCmd(migrateHashCmd(), "--dir", "file://testdata/sqlite3")
 	require.NoError(t, err)
-	s, err = runCmd(
+	_, err = runCmd(
 		migrateApplyCmd(),
 		"--dir", "file://testdata/sqlite3",
 		"--url", fmt.Sprintf("sqlite://file:%s?cache=shared&_fk=1", filepath.Join(p, "test2.db")),
@@ -310,6 +313,7 @@ func TestMigrate_Apply(t *testing.T) {
 		require.NoError(t, c1.Close())
 	})
 	sch, err = c1.InspectSchema(ctx, "", nil)
+	require.NoError(t, err)
 	tbl, ok = sch.Table("tbl")
 	require.True(t, ok)
 	_, ok = tbl.Column("col_2")
@@ -349,7 +353,7 @@ func TestMigrate_Apply(t *testing.T) {
 	// If the revision is before the last but after the first migration, only the last one is pending.
 	_, err = c1.ExecContext(ctx, "DROP table `atlas_schema_revisions`")
 	require.NoError(t, err)
-	s, err = runCmd(
+	_, err = runCmd(
 		migrateApplyCmd(), "1",
 		"--dir", "file://testdata/sqlite3",
 		"--url", fmt.Sprintf("sqlite://file:%s?cache=shared&_fk=1", filepath.Join(p, "test3.db")),
@@ -537,7 +541,7 @@ env "local" {
 
 		_, err = db.Exec("DELETE FROM `tenants`")
 		require.NoError(t, err)
-		s, err = runCmd(
+		_, err = runCmd(
 			cmd, "apply",
 			"-c", "file://"+path,
 			"--env", "local",
@@ -621,7 +625,7 @@ func TestMigrate_ApplyTxMode(t *testing.T) {
 			require.Equal(t, 2, n)
 
 			// Apply the rest.
-			s, err = runCmd(
+			_, err = runCmd(
 				migrateApplyCmd(),
 				"--dir", "file://testdata/sqlitetx",
 				"--url", fmt.Sprintf("sqlite://file:%s?cache=shared&_fk=1", filepath.Join(p, "test.db")),
@@ -657,7 +661,7 @@ func TestMigrate_ApplyTxMode(t *testing.T) {
 				require.Equal(t, 3, n)
 
 				// Apply the rest, expect it to fail due to constraint error, but only the new one is reported.
-				s, err = runCmd(
+				_, err = runCmd(
 					migrateApplyCmd(),
 					"--dir", "file://testdata/sqlitetx2",
 					"--url", fmt.Sprintf("sqlite://file:%s?cache=shared&_fk=1", filepath.Join(p, "test_2.db")),
@@ -893,7 +897,7 @@ func TestMigrate_Diff(t *testing.T) {
 
 	// Expect no clean dev error.
 	p = t.TempDir()
-	s, err := runCmd(
+	_, err = runCmd(
 		migrateDiffCmd(),
 		"name",
 		"--dir", "file://"+p,
@@ -904,7 +908,7 @@ func TestMigrate_Diff(t *testing.T) {
 	require.ErrorContains(t, err, "found table \"t\"")
 
 	// Works (on empty directory).
-	s, err = runCmd(
+	s, err := runCmd(
 		migrateDiffCmd(),
 		"name",
 		"--dir", "file://"+p,
@@ -949,6 +953,7 @@ func TestMigrate_Diff(t *testing.T) {
 			"--to", to,
 		}
 		_, err := runCmd(migrateDiffCmd(), args...)
+		require.NoError(t, err)
 		files, err := os.ReadDir(p)
 		require.NoError(t, err)
 		require.Len(t, files, 2)

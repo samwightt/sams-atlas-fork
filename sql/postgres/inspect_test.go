@@ -361,6 +361,38 @@ users        | users_check1       | (((c2 + c1) + c3) > 10) | c3          | {2,1
 	}
 }
 
+func TestDriver_InspectTable_ColumnTypeError(t *testing.T) {
+	db, m, err := sqlmock.New()
+	require.NoError(t, err)
+	mk := mock{m}
+	mk.version("150000")
+	drv, err := Open(db)
+	require.NoError(t, err)
+	drv.(*Driver).schema = "public"
+	mk.ExpectQuery(sqltest.Escape(fmt.Sprintf(schemasQueryArgs, "= $1"))).
+		WithArgs("public").
+		WillReturnRows(sqltest.Rows(`
+ schema_name | comment
+-------------+---------
+ public      | nil
+`))
+	mk.noEnums()
+	mk.tableExists("public", "users", true)
+	// ARRAY element type "decimal(abc)" fails to parse on the non-numeric precision,
+	// exercising the columnType error path in addColumn.
+	m.ExpectQuery(queryColumns).
+		WithArgs("public", "users").
+		WillReturnRows(sqltest.Rows(`
+ table_name | column_name | data_type | formatted      | is_nullable | column_default | character_maximum_length | numeric_precision | datetime_precision | numeric_scale | interval_type | character_set_name | collation_name | is_identity | identity_start | identity_increment | identity_last | identity_generation | generation_expression | comment | typtype | typelem | oid  | attnum
+------------+-------------+-----------+----------------+-------------+----------------+--------------------------+-------------------+--------------------+---------------+---------------+--------------------+----------------+-------------+----------------+--------------------+---------------+---------------------+-----------------------+---------+---------+---------+------+-------
+ users      | c1          | ARRAY     | decimal(abc)[] | NO          |                |                          |                   |                    |               |               |                    |                | NO          |                |                    |               |                     |                       |         | b       |         | 1700 |
+`))
+	_, err = drv.InspectSchema(context.Background(), "public", &schema.InspectOptions{
+		Mode: schema.InspectSchemas | schema.InspectTables | schema.InspectTypes,
+	})
+	require.ErrorContains(t, err, "parse precision")
+}
+
 func TestDriver_InspectPartitionedTable(t *testing.T) {
 	db, m, err := sqlmock.New()
 	require.NoError(t, err)
@@ -676,6 +708,7 @@ func TestInspectMode_InspectRealm(t *testing.T) {
  public      | nil
 `))
 	drv, err := Open(db)
+	require.NoError(t, err)
 	m.ExpectQuery(sqltest.Escape(fmt.Sprintf(enumsQuery, "$1, $2"))).
 		WillReturnRows(sqlmock.NewRows([]string{"schema_name", "enum_name", "comment", "enum_type", "enum_value"}))
 	realm, err := drv.InspectRealm(context.Background(), &schema.InspectRealmOption{Mode: schema.InspectSchemas})

@@ -7,6 +7,7 @@ package sqltool_test
 import (
 	"fmt"
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -153,6 +154,40 @@ DROP TABLE t1 IF EXISTS;
 			require.Equal(t, len(tt.expected), countFiles(t, d))
 			for name, content := range tt.expected {
 				requireFileEqual(t, d, name, content)
+			}
+		})
+	}
+}
+
+// TestFormatters_SharedTimestamp asserts that the two filenames emitted by a
+// paired up/down formatter (golang-migrate, flyway) always share a single
+// timestamp prefix even if the wall clock ticks during Format. Without this,
+// files straddling a second boundary produce out-of-order filenames and break
+// downstream tools that expect lexicographic pairing.
+func TestFormatters_SharedTimestamp(t *testing.T) {
+	prefix := func(name string) string {
+		// flyway filenames start with V/U; strip before splitting on "_" or "__".
+		name = strings.TrimLeft(name, "VU")
+		idx := strings.Index(name, "_")
+		require.GreaterOrEqual(t, idx, 0, "unexpected filename: %s", name)
+		return name[:idx]
+	}
+	for _, tt := range []struct {
+		name string
+		fmt  migrate.Formatter
+	}{
+		{"golang-migrate", sqltool.GolangMigrateFormatter},
+		{"flyway", sqltool.FlywayFormatter},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			// Iterate enough to cross at least one second boundary on typical CI hardware.
+			deadline := time.Now().Add(1500 * time.Millisecond)
+			for time.Now().Before(deadline) {
+				files, err := tt.fmt.Format(plan)
+				require.NoError(t, err)
+				require.Len(t, files, 2)
+				require.Equal(t, prefix(files[0].Name()), prefix(files[1].Name()),
+					"filenames %q and %q should share a timestamp", files[0].Name(), files[1].Name())
 			}
 		})
 	}

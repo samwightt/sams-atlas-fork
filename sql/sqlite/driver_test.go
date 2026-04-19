@@ -52,17 +52,17 @@ func TestDriver_LockAcquired(t *testing.T) {
 	require.NotNil(t, unlock)
 
 	// Acquiring a lock on a value that has been expired works.
-	dir, err := os.UserCacheDir()
-	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, "lock.lock"),
+		filepath.Join(os.TempDir(), "lock.lock"),
 		[]byte(strconv.FormatInt(time.Now().Add(-time.Second).UnixNano(), 10)),
 		0666,
 	))
 	_, err = drv.Lock(context.Background(), "lock", time.Second)
+	require.NoError(t, err)
 
 	// Acquiring a lock on another value works as well.
 	_, err = drv.Lock(context.Background(), "another", time.Second)
+	require.NoError(t, err)
 }
 
 func TestDriver_CheckClean(t *testing.T) {

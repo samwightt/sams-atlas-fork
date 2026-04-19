@@ -31,7 +31,8 @@ func TestFormatter(t *testing.T) {
 
 	u, err = url.Parse("file://migrations?format=atlas")
 	require.NoError(t, err)
-	f, err = Formatter(u)
+	_, err = Formatter(u)
+	require.NoError(t, err)
 
 	u, err = url.Parse("file://migrations?format=flyway")
 	require.NoError(t, err)
@@ -54,7 +55,7 @@ func TestRevisionsForClient(t *testing.T) {
 
 	drvMock := &mockDriver{Driver: c.Driver, rrw: &migrate.NopRevisionReadWriter{}}
 	c.Driver = drvMock
-	rrw, err = RevisionsForClient(ctx, c, "")
+	_, err = RevisionsForClient(ctx, c, "")
 	require.ErrorContains(t, err, "unexpected revision read-writer type: *migrate.NopRevisionReadWriter")
 
 	drvMock.rrw = &mockrrw{RevisionReadWriter: &migrate.NopRevisionReadWriter{}}

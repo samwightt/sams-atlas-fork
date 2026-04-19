@@ -57,7 +57,7 @@ func TestRegisterOpen(t *testing.T) {
 	require.Equal(t, "dsn", c.URL.DSN)
 	require.Equal(t, "schema", c.URL.Schema)
 
-	c1, err = sqlclient.Open(context.Background(), "postgres://:3306")
+	_, err = sqlclient.Open(context.Background(), "postgres://:3306")
 	require.EqualError(t, err, `sql/sqlclient: unknown driver "postgres". See: https://atlasgo.io/url`)
 }
 

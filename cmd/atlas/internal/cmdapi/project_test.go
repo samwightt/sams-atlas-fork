@@ -476,7 +476,7 @@ env {
 }
 `
 	require.NoError(t, os.WriteFile(path, []byte(h), 0600))
-	_, envs, err = EnvByName(&cobra.Command{}, "a8m", nil)
+	_, _, err = EnvByName(&cobra.Command{}, "a8m", nil)
 	require.ErrorContains(t, err, "all envs must have names on file")
 }
 
