@@ -1,0 +1,63 @@
+name: "CodeQL Advanced"
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "25 13 * * 4"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: go
+            build-mode: manual
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/atlas/go.mod
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # Build each Go module so CodeQL's extractor sees all three modules
+      # (root, cmd/atlas, internal/integration). Default setup + autobuild only
+      # analyze the root module, leaving ~60% of files uncovered.
+      - name: Build Go modules
+        if: matrix.language == 'go'
+        shell: bash
+        run: |
+          set -e
+          for dir in . cmd/atlas internal/integration; do
+            echo "::group::go build $dir/..."
+            (cd "$dir" && go build ./...)
+            echo "::endgroup::"
+          done
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
