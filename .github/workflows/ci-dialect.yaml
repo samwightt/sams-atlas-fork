@@ -24,40 +24,6 @@ jobs:
           path: cmd/atlas/atlas
           retention-days: 1
 
-  integration-mysql56:
-    runs-on: ubuntu-latest
-    needs: build-atlas
-    services:
-      mysql56:
-        image: mysql:5.6.35
-        env:
-          MYSQL_DATABASE: test
-          MYSQL_ROOT_PASSWORD: pass
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "mysqladmin ping -ppass"
-          --health-interval 10s
-          --health-start-period 10s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cmd/atlas/go.mod
-      - uses: actions/download-artifact@v4
-        with:
-          name: atlas
-          path: /tmp
-      - run: chmod +x /tmp/atlas
-      - name: Run integration tests for mysql56
-        working-directory: internal/integration
-        run: go test -race -count=2 -v -run="MySQL" -version="mysql56" -timeout 15m ./...
-        env:
-          MYSQL_DATABASE: test
-          MYSQL_ROOT_PASSWORD: pass
-
   integration-mysql57:
     runs-on: ubuntu-latest
     needs: build-atlas
@@ -97,7 +63,7 @@ jobs:
     needs: build-atlas
     services:
       mysql8:
-        image: mysql:8
+        image: mysql:8.0
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
@@ -122,6 +88,40 @@ jobs:
       - name: Run integration tests for mysql8
         working-directory: internal/integration
         run: go test -race -count=2 -v -run="MySQL" -version="mysql8" -timeout 15m ./...
+        env:
+          MYSQL_DATABASE: test
+          MYSQL_ROOT_PASSWORD: pass
+
+  integration-mysql84:
+    runs-on: ubuntu-latest
+    needs: build-atlas
+    services:
+      mysql84:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: test
+          MYSQL_ROOT_PASSWORD: pass
+        ports:
+          - 3309:3306
+        options: >-
+          --health-cmd "mysqladmin ping -ppass"
+          --health-interval 10s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/atlas/go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: atlas
+          path: /tmp
+      - run: chmod +x /tmp/atlas
+      - name: Run integration tests for mysql84
+        working-directory: internal/integration
+        run: go test -race -count=2 -v -run="MySQL" -version="mysql84" -timeout 15m ./...
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass

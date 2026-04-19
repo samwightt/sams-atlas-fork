@@ -35,7 +35,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	flag.StringVar(&flagVersion, "version", "", "[mysql56, postgres10, tidb5, ...] what version to test")
+	flag.StringVar(&flagVersion, "version", "", "[mysql57, postgres10, tidb5, ...] what version to test")
 	flag.Parse()
 	code := m.Run()
 	for _, db := range dbs {

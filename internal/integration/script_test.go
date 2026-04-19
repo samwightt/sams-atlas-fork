@@ -100,9 +100,10 @@ var keyT struct{}
 func (t *myTest) setupScript(env *testscript.Env) error {
 	attrs := t.defaultAttrs()
 	env.Setenv("version", t.version)
+	env.Setenv("version_family", t.versionFamily())
 	env.Setenv("charset", attrs[0].(*schema.Charset).V)
 	env.Setenv("collate", attrs[1].(*schema.Collation).V)
-	if err := replaceDBURL(env, t.url("")); err != nil {
+	if err := replaceDBURL(env, t.url(""), "PORT", strconv.Itoa(t.port)); err != nil {
 		return err
 	}
 	return setupScript(env, t.db,
@@ -116,14 +117,17 @@ func (t *myTest) setupScript(env *testscript.Env) error {
 		})
 }
 
-func replaceDBURL(env *testscript.Env, url string) error {
-	// Set the workdir in the test atlas.hcl file.
+// replaceDBURL substitutes "URL" (and any extra pairs of placeholder/value)
+// inside the test's atlas.hcl so fixtures can reference the current db URL,
+// port, etc. without hard-coding them per-version.
+func replaceDBURL(env *testscript.Env, url string, extra ...string) error {
 	projectFile := filepath.Join(env.WorkDir, "atlas.hcl")
-	if b, err := os.ReadFile(projectFile); err == nil {
-		rep := strings.ReplaceAll(string(b), "URL", url)
-		return os.WriteFile(projectFile, []byte(rep), 0600)
+	b, err := os.ReadFile(projectFile)
+	if err != nil {
+		return nil
 	}
-	return nil
+	pairs := append([]string{"URL", url}, extra...)
+	return os.WriteFile(projectFile, []byte(strings.NewReplacer(pairs...).Replace(string(b))), 0600)
 }
 
 func (t *pgTest) setupScript(env *testscript.Env) error {
@@ -328,12 +332,27 @@ func (t *liteTest) cmdCmpShow(ts *testscript.TestScript, _ bool, args []string) 
 	})
 }
 
+// resolveVersionedFile returns the path to use for a versioned fixture: it prefers
+// <version>/<fname>, falls back to <version_family>/<fname>, and finally to fname.
+func resolveVersionedFile(ts *testscript.TestScript, fname string) string {
+	for _, key := range []string{"version", "version_family"} {
+		v := ts.Getenv(key)
+		if v == "" {
+			continue
+		}
+		p := filepath.Join(v, fname)
+		if _, err := os.Stat(ts.MkAbs(p)); err == nil {
+			return p
+		}
+	}
+	return fname
+}
+
 func cmdCmpShow(ts *testscript.TestScript, args []string, show func(schema, name string) (string, error), normalize ...func(string) string) {
 	if len(args) < 2 {
 		ts.Fatalf("invalid number of args to 'cmpshow': %d", len(args))
 	}
 	var (
-		ver   = ts.Getenv("version")
 		fname = args[len(args)-1]
 		stmts = make([]string, 0, len(args)-1)
 	)
@@ -345,10 +364,7 @@ func cmdCmpShow(ts *testscript.TestScript, args []string, show func(schema, name
 		stmts = append(stmts, create)
 	}
 
-	// Check if there is a file prefixed by database version (1.sql and <version>/1.sql).
-	if _, err := os.Stat(ts.MkAbs(filepath.Join(ver, fname))); err == nil {
-		fname = filepath.Join(ver, fname)
-	}
+	fname = resolveVersionedFile(ts, fname)
 	t1, t2 := strings.Join(stmts, "\n"), ts.ReadFile(fname)
 	c1, c2 := t1, t2
 	for _, n := range normalize {
@@ -406,18 +422,12 @@ func cmdCmpHCL(ts *testscript.TestScript, args []string, inspect func(schema str
 	if len(read) == 0 {
 		read = append(read, ts.ReadFile)
 	}
-	var (
-		fname = args[0]
-		ver   = ts.Getenv("version")
-	)
+	fname := args[0]
 	f1, err := inspect(ts.Getenv("db"))
 	if err != nil {
 		ts.Fatalf("inspect schema %q: %v", ts.Getenv("db"), err)
 	}
-	// Check if there is a file prefixed by database version (1.sql and <version>/1.sql).
-	if _, err := os.Stat(ts.MkAbs(filepath.Join(ver, fname))); err == nil {
-		fname = filepath.Join(ver, fname)
-	}
+	fname = resolveVersionedFile(ts, fname)
 	f2 := read[0](fname)
 	if strings.TrimSpace(f1) == strings.TrimSpace(f2) {
 		return
@@ -522,14 +532,7 @@ func cmdCmpMig(ts *testscript.TestScript, _ bool, args []string) {
 	if len(args) < 2 {
 		ts.Fatalf("invalid number of args to 'cmpmig': %d", len(args))
 	}
-	// Check if there is a file prefixed by database version (1.sql and <version>/1.sql).
-	var (
-		ver   = ts.Getenv("version")
-		fname = args[1]
-	)
-	if _, err := os.Stat(ts.MkAbs(filepath.Join(ver, fname))); err == nil {
-		fname = filepath.Join(ver, fname)
-	}
+	fname := resolveVersionedFile(ts, args[1])
 	expected := strings.TrimSpace(ts.ReadFile(fname))
 	dir, err := os.ReadDir(ts.MkAbs("migrations"))
 	ts.Check(err)

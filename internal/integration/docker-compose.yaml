@@ -1,16 +1,4 @@
 services:
-  mysql56:
-    container_name: atlas-integration-mysql56
-    platform: linux/amd64
-    image: mysql:5.6.35
-    environment:
-      MYSQL_DATABASE: test
-      MYSQL_ROOT_PASSWORD: pass
-    healthcheck:
-      test: mysqladmin ping -ppass
-    ports:
-      - "3306:3306"
-
   mysql57:
     container_name: atlas-integration-mysql57
     platform: linux/amd64
@@ -26,7 +14,7 @@ services:
   mysql8:
     container_name: atlas-integration-mysql8
     platform: linux/amd64
-    image: mysql:8.4
+    image: mysql:8.0
     environment:
       MYSQL_DATABASE: test
       MYSQL_ROOT_PASSWORD: pass
@@ -34,6 +22,18 @@ services:
       test: mysqladmin ping -ppass
     ports:
       - "3308:3306"
+
+  mysql84:
+    container_name: atlas-integration-mysql84
+    platform: linux/amd64
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: test
+      MYSQL_ROOT_PASSWORD: pass
+    healthcheck:
+      test: mysqladmin ping -ppass
+    ports:
+      - "3309:3306"
 
   postgres-ext-postgis:
     container_name: atlas-integration-postgres-ext-postgis
