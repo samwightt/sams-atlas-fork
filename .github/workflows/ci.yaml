@@ -127,6 +127,55 @@ jobs:
           files: cmd/atlas/junit.xml
           report_type: test_results
 
+  sdk:
+    runs-on: ubuntu-latest
+    env:
+      GOCOVERDIR: /tmp/gocover
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/atlas/go.mod
+      - name: Install atlas binary with coverage instrumentation
+        working-directory: cmd/atlas
+        run: go install -cover -coverpkg=ariga.io/atlas/... .
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+      # Tests run twice: -coverprofile internally hijacks GOCOVERDIR so atlas
+      # subprocess counters get nuked. First pass collects harness coverage
+      # and JUnit; second pass (no -coverprofile) collects binary coverage.
+      - name: Run sdk tests (harness coverage + JUnit)
+        run: gotestsum --junitfile junit.xml --raw-command -- go test -json -race -coverprofile=coverage.txt ./atlasexec/... ./sdk/...
+      - name: Run sdk tests (binary coverage)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          mkdir -p "$GOCOVERDIR"
+          go test ./atlasexec/... ./sdk/...
+      - name: Convert binary coverage
+        if: ${{ !cancelled() }}
+        run: go tool covdata textfmt -i="$GOCOVERDIR" -o=bincoverage.txt
+      - name: Upload sdk coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.txt
+          flags: sdk
+      - name: Upload sdk binary coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: bincoverage.txt
+          flags: sdk-binary
+      - name: Upload sdk test results
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: junit.xml
+          report_type: test_results
+
   integration:
     runs-on: ubuntu-latest
     steps:
