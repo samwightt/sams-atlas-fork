@@ -4,6 +4,7 @@ linters:
   enable:
     - goheader
     - gosec
+    - govet
     - revive
   settings:
     goheader:
