@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -271,7 +272,38 @@ func (t *pgTest) cmdCmpShow(ts *testscript.TestScript, _ bool, args []string) {
 			lines[i] = strings.TrimRightFunc(lines[i], unicode.IsSpace)
 		}
 		return strings.Join(lines, "\n"), err
-	})
+	}, sortPgReferencedBy)
+}
+
+// sortPgReferencedBy sorts the indented body lines under psql \d's
+// "Referenced by:" section so comparisons are insensitive to psql's
+// non-deterministic row ordering when multiple referencing constraints
+// share a name. psql orders that section by conname alone, so ties fall
+// back to pg_constraint heap scan order which can flip run-to-run.
+//
+// Only "Referenced by:" is sorted today. Additional headers
+// (e.g. "Indexes:", "Foreign-key constraints:") can be added to the
+// switch below if they prove similarly order-sensitive.
+func sortPgReferencedBy(s string) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); {
+		out = append(out, lines[i])
+		switch strings.TrimRight(lines[i], " ") {
+		case "Referenced by:":
+			j := i + 1
+			for j < len(lines) && strings.HasPrefix(lines[j], " ") {
+				j++
+			}
+			body := append([]string(nil), lines[i+1:j]...)
+			sort.Strings(body)
+			out = append(out, body...)
+			i = j
+			continue
+		}
+		i++
+	}
+	return strings.Join(out, "\n")
 }
 
 func (t *liteTest) cmdCmpShow(ts *testscript.TestScript, _ bool, args []string) {
@@ -296,7 +328,7 @@ func (t *liteTest) cmdCmpShow(ts *testscript.TestScript, _ bool, args []string) 
 	})
 }
 
-func cmdCmpShow(ts *testscript.TestScript, args []string, show func(schema, name string) (string, error)) {
+func cmdCmpShow(ts *testscript.TestScript, args []string, show func(schema, name string) (string, error), normalize ...func(string) string) {
 	if len(args) < 2 {
 		ts.Fatalf("invalid number of args to 'cmpshow': %d", len(args))
 	}
@@ -318,7 +350,11 @@ func cmdCmpShow(ts *testscript.TestScript, args []string, show func(schema, name
 		fname = filepath.Join(ver, fname)
 	}
 	t1, t2 := strings.Join(stmts, "\n"), ts.ReadFile(fname)
-	if strings.TrimSpace(t1) == strings.TrimSpace(t2) {
+	c1, c2 := t1, t2
+	for _, n := range normalize {
+		c1, c2 = n(c1), n(c2)
+	}
+	if strings.TrimSpace(c1) == strings.TrimSpace(c2) {
 		return
 	}
 	var sb strings.Builder
