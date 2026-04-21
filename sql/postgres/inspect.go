@@ -272,16 +272,19 @@ func (i *inspect) addColumn(s *schema.Schema, rows *sql.Rows) (err error) {
 		},
 	}
 	c.Type.Type, err = columnType(&columnDesc{
-		typ:           typ.String,
-		fmtype:        fmtype.String,
-		size:          maxlen.Int64,
-		scale:         scale.Int64,
-		typtype:       typtype.String,
-		typelem:       typelem.Int64,
-		typid:         typid.Int64,
-		interval:      interval.String,
-		precision:     precision.Int64,
-		timePrecision: &timeprecision.Int64,
+		typ:       typ.String,
+		fmtype:    fmtype.String,
+		size:      int(maxlen.Int64),
+		scale:     int(scale.Int64),
+		typtype:   typtype.String,
+		typelem:   typelem.Int64,
+		typid:     typid.Int64,
+		interval:  interval.String,
+		precision: int(precision.Int64),
+		timePrecision: func() *int {
+			p := int(timeprecision.Int64)
+			return &p
+		}(),
 	})
 	if err != nil {
 		return err

@@ -6,6 +6,7 @@ package postgres
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"testing"
 
@@ -2100,6 +2101,21 @@ func TestParseType_Interval(t *testing.T) {
 			require.Equal(t, tt.parsed, p)
 		})
 	}
+}
+
+func TestParseTypeRejectsIntOverflow(t *testing.T) {
+	tooLarge := strconv.Itoa(math.MaxInt) + "1"
+	_, err := ParseType("varchar(" + tooLarge + ")")
+	require.EqualError(t, err, `postgres: parse size "`+tooLarge+`": strconv.ParseInt: parsing "`+tooLarge+`": value out of range`)
+
+	_, err = ParseType("numeric(" + tooLarge + ")")
+	require.EqualError(t, err, `postgres: parse precision "`+tooLarge+`": strconv.ParseInt: parsing "`+tooLarge+`": value out of range`)
+
+	_, err = ParseType("numeric(10," + tooLarge + ")")
+	require.EqualError(t, err, `postgres: parse scale "10": strconv.ParseInt: parsing "`+tooLarge+`": value out of range`)
+
+	_, err = ParseType("timestamp(" + tooLarge + ") with time zone")
+	require.EqualError(t, err, `postgres: parse time precision "`+tooLarge+`": strconv.ParseInt: parsing "`+tooLarge+`": value out of range`)
 }
 
 func TestRegistrySanity(t *testing.T) {

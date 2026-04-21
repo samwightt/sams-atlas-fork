@@ -224,7 +224,7 @@ func columnType(c *columnDesc) (schema.Type, error) {
 	case TypeBigInt, TypeInt8, TypeInt, TypeInteger, TypeInt4, TypeSmallInt, TypeInt2, TypeInt64, TypeXID, TypeXID8:
 		typ = &schema.IntegerType{T: t}
 	case TypeBit, TypeBitVar:
-		typ = &BitType{T: t, Len: c.size}
+		typ = &BitType{T: t, Len: int64(c.size)}
 	case TypeBool, TypeBoolean:
 		typ = &schema.BoolType{T: t}
 	case TypeBytea:
@@ -344,13 +344,13 @@ func intervalField(t string) (string, bool) {
 type columnDesc struct {
 	typ           string // data_type
 	fmtype        string // pg_catalog.format_type
-	size          int64  // character_maximum_length
+	size          int    // character_maximum_length
 	typtype       string // pg_type.typtype
 	typelem       int64  // pg_type.typelem
 	typid         int64  // pg_type.oid
-	precision     int64
-	timePrecision *int64
-	scale         int64
+	precision     int
+	timePrecision *int
+	scale         int
 	parts         []string
 	interval      string
 }
@@ -364,13 +364,10 @@ func parseColumn(s string) (*columnDesc, error) {
 	parts := strings.FieldsFunc(s, func(r rune) bool {
 		return r == '(' || r == ')' || r == ' ' || r == ','
 	})
-	var (
-		err error
-		c   = &columnDesc{
-			typ:   parts[0],
-			parts: parts,
-		}
-	)
+	c := &columnDesc{
+		typ:   parts[0],
+		parts: parts,
+	}
 	switch c.parts[0] {
 	case TypeVarChar, TypeCharVar, TypeChar, TypeCharacter:
 		if err := parseCharParts(c.parts, c); err != nil {
@@ -378,16 +375,18 @@ func parseColumn(s string) (*columnDesc, error) {
 		}
 	case TypeDecimal, TypeNumeric, TypeFloat:
 		if len(parts) > 1 {
-			c.precision, err = strconv.ParseInt(parts[1], 10, 64)
+			i, err := strconv.ParseInt(parts[1], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("postgres: parse precision %q: %w", parts[1], err)
 			}
+			c.precision = int(i)
 		}
 		if len(parts) > 2 {
-			c.scale, err = strconv.ParseInt(parts[2], 10, 64)
+			i, err := strconv.ParseInt(parts[2], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("postgres: parse scale %q: %w", parts[1], err)
 			}
+			c.scale = int(i)
 		}
 	case TypeBit:
 		if err := parseBitParts(parts, c); err != nil {
@@ -398,16 +397,16 @@ func parseColumn(s string) (*columnDesc, error) {
 	case TypeReal, TypeFloat4:
 		c.precision = 24
 	case TypeTime, TypeTimeTZ, TypeTimestamp, TypeTimestampTZ:
-		t, p := s, int64(defaultTimePrecision)
+		t, p := s, defaultTimePrecision
 		// If the second part is only one digit it is the precision argument.
 		// For cases like "timestamp(4) with time zone" make sure to not drop
 		// the rest of the type definition.
 		if len(parts) > 1 && reDigits.MatchString(parts[1]) {
-			i, err := strconv.ParseInt(parts[1], 10, 64)
+			i, err := strconv.ParseInt(parts[1], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("postgres: parse time precision %q: %w", parts[1], err)
 			}
-			p = i
+			p = int(i)
 			t = strings.Join(append(c.parts[:1], c.parts[2:]...), " ")
 		}
 		c.typ = timeAlias(t)
@@ -416,11 +415,12 @@ func parseColumn(s string) (*columnDesc, error) {
 		matches := reInterval.FindStringSubmatch(s)
 		c.interval = matches[1]
 		if matches[2] != "" {
-			i, err := strconv.ParseInt(matches[2], 10, 64)
+			i, err := strconv.ParseInt(matches[2], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("postgres: parse interval precision %q: %w", parts[1], err)
 			}
-			c.timePrecision = &i
+			j := int(i)
+			c.timePrecision = &j
 		}
 	default:
 		c.typ = s
@@ -443,11 +443,11 @@ func parseCharParts(parts []string, c *columnDesc) error {
 	if len(parts) == 0 {
 		return nil
 	}
-	size, err := strconv.ParseInt(parts[0], 10, 64)
+	size, err := strconv.ParseInt(parts[0], 10, strconv.IntSize)
 	if err != nil {
 		return fmt.Errorf("postgres: parse size %q: %w", parts[0], err)
 	}
-	c.size = size
+	c.size = int(size)
 	return nil
 }
 
@@ -464,11 +464,11 @@ func parseBitParts(parts []string, c *columnDesc) error {
 	if len(parts) == 0 {
 		return nil
 	}
-	size, err := strconv.ParseInt(parts[0], 10, 64)
+	size, err := strconv.ParseInt(parts[0], 10, strconv.IntSize)
 	if err != nil {
 		return fmt.Errorf("postgres: parse size %q: %w", parts[1], err)
 	}
-	c.size = size
+	c.size = int(size)
 	return nil
 }
 
