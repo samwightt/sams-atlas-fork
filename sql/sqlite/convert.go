@@ -74,14 +74,14 @@ func ParseType(c string) (schema.Type, error) {
 	case "numeric", "decimal":
 		ct := &schema.DecimalType{T: t}
 		if len(parts) > 1 {
-			p, err := strconv.ParseInt(parts[1], 10, 64)
+			p, err := strconv.ParseInt(parts[1], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("parse precision %q", parts[1])
 			}
 			ct.Precision = int(p)
 		}
 		if len(parts) > 2 {
-			s, err := strconv.ParseInt(parts[2], 10, 64)
+			s, err := strconv.ParseInt(parts[2], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("parse scale %q", parts[1])
 			}
@@ -91,7 +91,7 @@ func ParseType(c string) (schema.Type, error) {
 	case "char", "character", "varchar", "varying character", "nchar", "native character", "nvarchar", "text", "clob":
 		ct := &schema.StringType{T: t}
 		if len(parts) > 1 {
-			p, err := strconv.ParseInt(parts[1], 10, 64)
+			p, err := strconv.ParseInt(parts[1], 10, strconv.IntSize)
 			if err != nil {
 				return nil, fmt.Errorf("parse size %q", parts[1])
 			}
