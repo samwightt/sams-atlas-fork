@@ -1520,6 +1520,116 @@ func TestMigrate_Hash(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestMigrate_Rm(t *testing.T) {
+	// Helper: seed a temp dir with the given filenames+contents and a valid atlas.sum.
+	seed := func(t *testing.T, files map[string]string) string {
+		t.Helper()
+		p := t.TempDir()
+		for name, content := range files {
+			require.NoError(t, os.WriteFile(filepath.Join(p, name), []byte(content), 0600))
+		}
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		sum, err := dir.Checksum()
+		require.NoError(t, err)
+		require.NoError(t, migrate.WriteSumFile(dir, sum))
+		return p
+	}
+
+	t.Run("by version prefix", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql":  "CREATE TABLE a(c int);",
+			"20220202020202_second.sql": "CREATE TABLE b(c int);",
+		})
+		s, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "20220101010101")
+		require.NoError(t, err)
+		require.Contains(t, s, "Removed 20220101010101_first.sql")
+		require.NoFileExists(t, filepath.Join(p, "20220101010101_first.sql"))
+		require.FileExists(t, filepath.Join(p, "20220202020202_second.sql"))
+		// atlas.sum is regenerated and consistent with the remaining files.
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		require.NoError(t, migrate.Validate(dir))
+	})
+
+	t.Run("by exact filename", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql":  "CREATE TABLE a(c int);",
+			"20220202020202_second.sql": "CREATE TABLE b(c int);",
+		})
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "20220202020202_second.sql")
+		require.NoError(t, err)
+		require.FileExists(t, filepath.Join(p, "20220101010101_first.sql"))
+		require.NoFileExists(t, filepath.Join(p, "20220202020202_second.sql"))
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		require.NoError(t, migrate.Validate(dir))
+	})
+
+	t.Run("paired up/down files removed together", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"1_init.up.sql":   "CREATE TABLE a(c int);",
+			"1_init.down.sql": "DROP TABLE a;",
+			"2_next.up.sql":   "CREATE TABLE b(c int);",
+			"2_next.down.sql": "DROP TABLE b;",
+		})
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "1")
+		require.NoError(t, err)
+		require.NoFileExists(t, filepath.Join(p, "1_init.up.sql"))
+		require.NoFileExists(t, filepath.Join(p, "1_init.down.sql"))
+		require.FileExists(t, filepath.Join(p, "2_next.up.sql"))
+		require.FileExists(t, filepath.Join(p, "2_next.down.sql"))
+	})
+
+	t.Run("no match is an error", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql": "CREATE TABLE a(c int);",
+		})
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "99999999999999")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no migration files found")
+		require.FileExists(t, filepath.Join(p, "20220101010101_first.sql"))
+	})
+
+	t.Run("removing the last file leaves a valid empty dir", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_only.sql": "CREATE TABLE a(c int);",
+		})
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "20220101010101")
+		require.NoError(t, err)
+		require.NoFileExists(t, filepath.Join(p, "20220101010101_only.sql"))
+		require.FileExists(t, filepath.Join(p, migrate.HashFileName))
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		require.NoError(t, migrate.Validate(dir))
+		files, err := dir.Files()
+		require.NoError(t, err)
+		require.Empty(t, files)
+	})
+
+	t.Run("stale atlas.sum is rejected", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql": "CREATE TABLE a(c int);",
+		})
+		// Tamper with the file contents without rehashing.
+		require.NoError(t, os.WriteFile(
+			filepath.Join(p, "20220101010101_first.sql"),
+			[]byte("CREATE TABLE a(c text);"),
+			0600,
+		))
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "20220101010101")
+		require.Error(t, err)
+		// File must still be on disk — rm refused to run.
+		require.FileExists(t, filepath.Join(p, "20220101010101_first.sql"))
+	})
+
+	t.Run("non-local dir is rejected", func(t *testing.T) {
+		_, err := runCmd(migrateRmCmd(), "--dir", "mem://rm-test", "20220101010101")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "only supports local directories")
+	})
+}
+
 func TestMigrate_Lint(t *testing.T) {
 	p := t.TempDir()
 	s, err := runCmd(
