@@ -649,7 +649,7 @@ func init() {
 		unsupportedCommand("migrate", "checkpoint"),
 		unsupportedCommand("migrate", "down"),
 		unsupportedCommand("migrate", "rebase"),
-		unsupportedCommand("migrate", "rm"),
+		migrateRmCmd(),
 		unsupportedCommand("migrate", "edit"),
 		unsupportedCommand("migrate", "push"),
 		unsupportedCommand("migrate", "test"),

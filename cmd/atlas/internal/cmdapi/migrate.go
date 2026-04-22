@@ -882,6 +882,88 @@ func migrateNewRun(cmd *cobra.Command, args []string, flags migrateNewFlags) err
 	return migrate.NewPlanner(nil, dir, migrate.PlanFormat(f)).WritePlan(&migrate.Plan{Name: name})
 }
 
+type migrateRmFlags struct{ dirURL, dirFormat string }
+
+// migrateRmCmd represents the 'atlas migrate rm' subcommand.
+func migrateRmCmd() *cobra.Command {
+	var (
+		flags migrateRmFlags
+		cmd   = &cobra.Command{
+			Use:   "rm [flags] version",
+			Short: "Remove a migration file from the migration directory.",
+			Long: `'atlas migrate rm' removes a migration file from a local migration directory and
+updates the atlas.sum integrity file. The argument may be a version prefix (e.g.
+20060102150405), matching all files for that version, or a full filename. Does
+not work for remote directories.`,
+			Example: `  atlas migrate rm 20060102150405
+  atlas migrate rm --env local 20060102150405
+  atlas migrate rm --env local 20060102150405_name.sql`,
+			Args: cobra.ExactArgs(1),
+			PreRunE: func(cmd *cobra.Command, _ []string) error {
+				if err := migrateFlagsFromConfig(cmd); err != nil {
+					return err
+				}
+				if err := dirFormatBC(flags.dirFormat, &flags.dirURL); err != nil {
+					return err
+				}
+				return checkDir(cmd, flags.dirURL, false)
+			},
+			RunE: RunE(func(cmd *cobra.Command, args []string) error {
+				return migrateRmRun(cmd, args, flags)
+			}),
+		}
+	)
+	cmd.Flags().SortFlags = false
+	addFlagDirURL(cmd.Flags(), &flags.dirURL)
+	addFlagDirFormat(cmd.Flags(), &flags.dirFormat)
+	return cmd
+}
+
+func migrateRmRun(cmd *cobra.Command, args []string, flags migrateRmFlags) error {
+	dir, err := cmdmigrate.Dir(cmd.Context(), flags.dirURL, false)
+	if err != nil {
+		return err
+	}
+	local, ok := dir.(*migrate.LocalDir)
+	if !ok {
+		return fmt.Errorf("atlas migrate rm only supports local directories, got %T", dir)
+	}
+	files, err := local.Files()
+	if err != nil {
+		return err
+	}
+	arg := args[0]
+	var matched []migrate.File
+	if strings.HasSuffix(arg, ".sql") {
+		for _, f := range files {
+			if f.Name() == arg {
+				matched = append(matched, f)
+				break
+			}
+		}
+	} else {
+		for _, f := range files {
+			if f.Version() == arg {
+				matched = append(matched, f)
+			}
+		}
+	}
+	if len(matched) == 0 {
+		return fmt.Errorf("no migration files found matching %q", arg)
+	}
+	for _, f := range matched {
+		if err := os.Remove(filepath.Join(local.Path(), f.Name())); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", f.Name())
+	}
+	sum, err := local.Checksum()
+	if err != nil {
+		return err
+	}
+	return migrate.WriteSumFile(local, sum)
+}
+
 type migrateSetFlags struct {
 	url               string
 	dirURL, dirFormat string
