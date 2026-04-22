@@ -1,0 +1,50 @@
+# Seed the migration directory's atlas.sum.
+atlas migrate hash
+
+# Argument validation.
+! atlas migrate rm
+stderr 'Error: accepts 1 arg\(s\), received 0'
+
+! atlas migrate rm foo bar
+stderr 'Error: accepts 1 arg\(s\), received 2'
+
+# Remove a migration by version prefix.
+exists migrations/1_first.sql
+atlas migrate rm 1
+stdout 'Removed 1_first.sql'
+! exists migrations/1_first.sql
+exists migrations/2_second.sql
+# atlas.sum was regenerated — subsequent validate passes.
+atlas migrate validate
+
+# Remove a migration by exact filename.
+atlas migrate rm 2_second.sql
+stdout 'Removed 2_second.sql'
+! exists migrations/2_second.sql
+# Dir is now empty but still valid.
+atlas migrate validate
+
+# Rm with no match.
+! atlas migrate rm 99999999999999
+stderr 'no migration files found matching'
+
+# Remote (non-local) dirs are rejected.
+! atlas migrate rm --dir mem://rm-test 1
+stderr 'only supports local directories'
+
+# Stale atlas.sum is rejected before any deletion.
+cp first.sql migrations/1_first.sql
+atlas migrate hash
+cp first_modified.sql migrations/1_first.sql
+! atlas migrate rm 1
+stdout 'You have a checksum error'
+exists migrations/1_first.sql
+
+-- migrations/1_first.sql --
+CREATE TABLE `users` (`id` integer NOT NULL, PRIMARY KEY (`id`));
+-- migrations/2_second.sql --
+CREATE TABLE `pets` (`id` integer NOT NULL, PRIMARY KEY (`id`));
+-- first.sql --
+CREATE TABLE `users` (`id` integer NOT NULL, PRIMARY KEY (`id`));
+-- first_modified.sql --
+CREATE TABLE `users` (`id` integer NOT NULL, `age` integer, PRIMARY KEY (`id`));

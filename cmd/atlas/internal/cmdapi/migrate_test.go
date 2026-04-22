@@ -1566,7 +1566,7 @@ func TestMigrate_Rm(t *testing.T) {
 		require.NoError(t, migrate.Validate(dir))
 	})
 
-	t.Run("paired up/down files removed together", func(t *testing.T) {
+	t.Run("paired up/down files removed together by version", func(t *testing.T) {
 		p := seed(t, map[string]string{
 			"1_init.up.sql":   "CREATE TABLE a(c int);",
 			"1_init.down.sql": "DROP TABLE a;",
@@ -1579,6 +1579,28 @@ func TestMigrate_Rm(t *testing.T) {
 		require.NoFileExists(t, filepath.Join(p, "1_init.down.sql"))
 		require.FileExists(t, filepath.Join(p, "2_next.up.sql"))
 		require.FileExists(t, filepath.Join(p, "2_next.down.sql"))
+	})
+
+	t.Run("filename match is precise and leaves the sibling", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"1_init.up.sql":   "CREATE TABLE a(c int);",
+			"1_init.down.sql": "DROP TABLE a;",
+		})
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "1_init.up.sql")
+		require.NoError(t, err)
+		require.NoFileExists(t, filepath.Join(p, "1_init.up.sql"))
+		require.FileExists(t, filepath.Join(p, "1_init.down.sql"))
+	})
+
+	t.Run("non-sql files are not touched", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql": "CREATE TABLE a(c int);",
+		})
+		require.NoError(t, os.WriteFile(filepath.Join(p, "README.md"), []byte("hi"), 0600))
+		_, err := runCmd(migrateRmCmd(), "--dir", "file://"+p, "20220101010101")
+		require.NoError(t, err)
+		require.NoFileExists(t, filepath.Join(p, "20220101010101_first.sql"))
+		require.FileExists(t, filepath.Join(p, "README.md"))
 	})
 
 	t.Run("no match is an error", func(t *testing.T) {
@@ -1627,6 +1649,12 @@ func TestMigrate_Rm(t *testing.T) {
 		_, err := runCmd(migrateRmCmd(), "--dir", "mem://rm-test", "20220101010101")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "only supports local directories")
+	})
+
+	t.Run("unparseable --dir URL is rejected", func(t *testing.T) {
+		_, err := runCmd(migrateRmCmd(), "--dir", "%", "20220101010101")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid URL escape")
 	})
 }
 
