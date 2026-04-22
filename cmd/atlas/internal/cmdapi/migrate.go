@@ -932,7 +932,28 @@ func migrateRmRun(cmd *cobra.Command, args []string, flags migrateRmFlags) error
 	if err != nil {
 		return err
 	}
-	arg := args[0]
+	matched := matchMigrationFiles(files, args[0])
+	if len(matched) == 0 {
+		return fmt.Errorf("no migration files found matching %q", args[0])
+	}
+	for _, f := range matched {
+		if err := os.Remove(filepath.Join(local.Path(), f.Name())); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", f.Name())
+	}
+	sum, err := local.Checksum()
+	if err != nil {
+		return err
+	}
+	return migrate.WriteSumFile(local, sum)
+}
+
+// matchMigrationFiles returns files matching arg. If arg has a .sql suffix, the
+// match is by exact filename (at most one result). Otherwise, the match is by
+// version prefix, which may return multiple files for paired formats like
+// golang-migrate (.up.sql + .down.sql).
+func matchMigrationFiles(files []migrate.File, arg string) []migrate.File {
 	var matched []migrate.File
 	if strings.HasSuffix(arg, ".sql") {
 		for _, f := range files {
@@ -941,21 +962,87 @@ func migrateRmRun(cmd *cobra.Command, args []string, flags migrateRmFlags) error
 				break
 			}
 		}
-	} else {
-		for _, f := range files {
-			if f.Version() == arg {
-				matched = append(matched, f)
-			}
+		return matched
+	}
+	for _, f := range files {
+		if f.Version() == arg {
+			matched = append(matched, f)
 		}
 	}
-	if len(matched) == 0 {
-		return fmt.Errorf("no migration files found matching %q", arg)
-	}
-	for _, f := range matched {
-		if err := os.Remove(filepath.Join(local.Path(), f.Name())); err != nil {
-			return err
+	return matched
+}
+
+type migrateEditFlags struct{ dirURL, dirFormat string }
+
+// migrateEditCmd represents the 'atlas migrate edit' subcommand.
+func migrateEditCmd() *cobra.Command {
+	var (
+		flags migrateEditFlags
+		cmd   = &cobra.Command{
+			Use:   "edit [flags] version",
+			Short: "Edit a migration file in $EDITOR.",
+			Long: `'atlas migrate edit' opens a migration file from a local migration directory in
+$EDITOR (falling back to 'vi') and updates the atlas.sum integrity file after
+the editor exits. The argument may be a version prefix (e.g. 20060102150405),
+matching a single file, or a full filename. If a version prefix matches multiple
+files (such as paired .up.sql/.down.sql in golang-migrate format), pass the
+exact filename to disambiguate. Does not work for remote directories.`,
+			Example: `  atlas migrate edit 20060102150405
+  atlas migrate edit --env local 20060102150405
+  atlas migrate edit --env local 20060102150405_name.sql`,
+			Args: cobra.ExactArgs(1),
+			PreRunE: func(cmd *cobra.Command, _ []string) error {
+				if err := migrateFlagsFromConfig(cmd); err != nil {
+					return err
+				}
+				if err := dirFormatBC(flags.dirFormat, &flags.dirURL); err != nil {
+					return err
+				}
+				return checkDir(cmd, flags.dirURL, false)
+			},
+			RunE: RunE(func(cmd *cobra.Command, args []string) error {
+				return migrateEditRun(cmd, args, flags)
+			}),
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", f.Name())
+	)
+	cmd.Flags().SortFlags = false
+	addFlagDirURL(cmd.Flags(), &flags.dirURL)
+	addFlagDirFormat(cmd.Flags(), &flags.dirFormat)
+	return cmd
+}
+
+func migrateEditRun(cmd *cobra.Command, args []string, flags migrateEditFlags) error {
+	dir, err := cmdmigrate.Dir(cmd.Context(), flags.dirURL, false)
+	if err != nil {
+		return err
+	}
+	local, ok := dir.(*migrate.LocalDir)
+	if !ok {
+		return fmt.Errorf("atlas migrate edit only supports local directories, got %T", dir)
+	}
+	files, err := local.Files()
+	if err != nil {
+		return err
+	}
+	matched := matchMigrationFiles(files, args[0])
+	switch len(matched) {
+	case 0:
+		return fmt.Errorf("no migration files found matching %q", args[0])
+	case 1:
+	default:
+		names := make([]string, len(matched))
+		for i, f := range matched {
+			names[i] = f.Name()
+		}
+		return fmt.Errorf("multiple migration files matched %q: %s; pass an exact filename to disambiguate", args[0], strings.Join(names, ", "))
+	}
+	f := matched[0]
+	edited, err := edit(f.Name(), f.Bytes())
+	if err != nil {
+		return err
+	}
+	if err := local.WriteFile(f.Name(), edited); err != nil {
+		return err
 	}
 	sum, err := local.Checksum()
 	if err != nil {

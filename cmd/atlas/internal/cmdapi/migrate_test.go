@@ -1658,6 +1658,106 @@ func TestMigrate_Rm(t *testing.T) {
 	})
 }
 
+func TestMigrate_Edit(t *testing.T) {
+	// Helper: seed a temp dir with the given filenames+contents and a valid atlas.sum.
+	seed := func(t *testing.T, files map[string]string) string {
+		t.Helper()
+		p := t.TempDir()
+		for name, content := range files {
+			require.NoError(t, os.WriteFile(filepath.Join(p, name), []byte(content), 0600))
+		}
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		sum, err := dir.Checksum()
+		require.NoError(t, err)
+		require.NoError(t, migrate.WriteSumFile(dir, sum))
+		return p
+	}
+
+	t.Run("edits a single matched file and rehashes", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql": "CREATE TABLE a(c int);",
+		})
+		t.Setenv("EDITOR", "echo 'edited' >")
+		_, err := runCmd(migrateEditCmd(), "--dir", "file://"+p, "20220101010101")
+		require.NoError(t, err)
+		b, err := os.ReadFile(filepath.Join(p, "20220101010101_first.sql"))
+		require.NoError(t, err)
+		require.Equal(t, "edited\n", string(b))
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		require.NoError(t, migrate.Validate(dir))
+	})
+
+	t.Run("edits by exact filename", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql":  "CREATE TABLE a(c int);",
+			"20220202020202_second.sql": "CREATE TABLE b(c int);",
+		})
+		t.Setenv("EDITOR", "echo 'edited' >")
+		_, err := runCmd(migrateEditCmd(), "--dir", "file://"+p, "20220202020202_second.sql")
+		require.NoError(t, err)
+		// Target file was rewritten.
+		b, err := os.ReadFile(filepath.Join(p, "20220202020202_second.sql"))
+		require.NoError(t, err)
+		require.Equal(t, "edited\n", string(b))
+		// Sibling untouched.
+		b, err = os.ReadFile(filepath.Join(p, "20220101010101_first.sql"))
+		require.NoError(t, err)
+		require.Equal(t, "CREATE TABLE a(c int);", string(b))
+		dir, err := migrate.NewLocalDir(p)
+		require.NoError(t, err)
+		require.NoError(t, migrate.Validate(dir))
+	})
+
+	t.Run("ambiguous version match is an error", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"1_init.up.sql":   "CREATE TABLE a(c int);",
+			"1_init.down.sql": "DROP TABLE a;",
+		})
+		t.Setenv("EDITOR", "false") // should never run
+		_, err := runCmd(migrateEditCmd(), "--dir", "file://"+p, "1")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "multiple migration files matched")
+		require.Contains(t, err.Error(), "disambiguate")
+		// Files are untouched.
+		b, err := os.ReadFile(filepath.Join(p, "1_init.up.sql"))
+		require.NoError(t, err)
+		require.Equal(t, "CREATE TABLE a(c int);", string(b))
+	})
+
+	t.Run("no match is an error", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql": "CREATE TABLE a(c int);",
+		})
+		t.Setenv("EDITOR", "false")
+		_, err := runCmd(migrateEditCmd(), "--dir", "file://"+p, "99999999999999")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no migration files found")
+	})
+
+	t.Run("stale atlas.sum is rejected", func(t *testing.T) {
+		p := seed(t, map[string]string{
+			"20220101010101_first.sql": "CREATE TABLE a(c int);",
+		})
+		require.NoError(t, os.WriteFile(
+			filepath.Join(p, "20220101010101_first.sql"),
+			[]byte("CREATE TABLE a(c text);"),
+			0600,
+		))
+		t.Setenv("EDITOR", "false")
+		_, err := runCmd(migrateEditCmd(), "--dir", "file://"+p, "20220101010101")
+		require.Error(t, err)
+	})
+
+	t.Run("non-local dir is rejected", func(t *testing.T) {
+		t.Setenv("EDITOR", "false")
+		_, err := runCmd(migrateEditCmd(), "--dir", "mem://edit-test", "20220101010101")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "only supports local directories")
+	})
+}
+
 func TestMigrate_Lint(t *testing.T) {
 	p := t.TempDir()
 	s, err := runCmd(

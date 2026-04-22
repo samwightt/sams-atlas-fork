@@ -650,7 +650,7 @@ func init() {
 		unsupportedCommand("migrate", "down"),
 		unsupportedCommand("migrate", "rebase"),
 		migrateRmCmd(),
-		unsupportedCommand("migrate", "edit"),
+		migrateEditCmd(),
 		unsupportedCommand("migrate", "push"),
 		unsupportedCommand("migrate", "test"),
 	)
